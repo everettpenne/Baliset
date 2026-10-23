@@ -1,6 +1,7 @@
 package com.everettpenne.baliset.playback
 
 import android.content.ComponentName
+import android.os.Bundle
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -9,7 +10,9 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.everettpenne.baliset.data.Artwork
+import com.everettpenne.baliset.data.LEVEL_GAIN_EXTRA
 import com.everettpenne.baliset.data.Library
+import com.everettpenne.baliset.data.Levels
 import com.everettpenne.baliset.data.Settings
 import com.everettpenne.baliset.data.Track
 import com.everettpenne.baliset.util.clock
@@ -60,6 +63,7 @@ object Playback {
     private var appContext: Context? = null
     private var library: Library? = null
     private var settings: Settings? = null
+    private var levels: Levels? = null
 
     private var baseQueue: List<Track> = emptyList()
     private var queue: List<Track> = emptyList()
@@ -74,10 +78,11 @@ object Playback {
     val state: StateFlow<NowPlaying> = _state.asStateFlow()
 
     /** Connects once. Safe to call from every composition: later calls are ignored. */
-    fun start(context: Context, library: Library, settings: Settings) {
+    fun start(context: Context, library: Library, settings: Settings, levels: Levels) {
         appContext = context.applicationContext
         this.library = library
         this.settings = settings
+        this.levels = levels
         if (controller != null || connecting != null) return
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
@@ -192,11 +197,16 @@ object Playback {
         val artwork = HashMap<String, ByteArray?>()
         return tracks.map { track ->
             val bytes = artwork.getOrPut(track.albumKey) { Artwork.bytes(context, track.albumKey) }
+            // The gain is always carried, so the service can honour the leveling switch as it is now, not as it was when the
+            // queue was built. Tracks without a measurement simply carry 1.0.
+            val gain = levels?.gainFor(track.id) ?: 1f
+            val extras = Bundle().apply { putFloat(LEVEL_GAIN_EXTRA, gain) }
             val metadata = MediaMetadata.Builder()
                 .setTitle(track.title)
                 .setArtist(track.artist)
                 .setAlbumTitle(track.album)
-                .setAlbumArtist(track.artist)
+                .setAlbumArtist(track.albumArtist ?: track.artist)
+                .setExtras(extras)
                 .apply { if (bytes != null) setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER) }
                 .build()
             MediaItem.Builder()

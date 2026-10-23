@@ -87,6 +87,10 @@ class AiffAndId3Test {
             "TALB" to textFrame("Staring At The Sea"),
             "TYER" to textFrame("1982"),
             "TRCK" to textFrame("11/18"),
+            "TPE2" to textFrame("The Cure"),
+            "TPOS" to textFrame("1/2"),
+            "TCON" to textFrame("Rock"),
+            "TXXX" to (byteArrayOf(0) + "REPLAYGAIN_TRACK_GAIN".toByteArray() + byteArrayOf(0) + "-7.25 dB".toByteArray()),
             "APIC" to apic(),
         )))
         assertNotNull(tags)
@@ -95,6 +99,10 @@ class AiffAndId3Test {
         assertEquals("Staring At The Sea", tags.album)
         assertEquals(1982, tags.year ?: 0)
         assertEquals(11, tags.track ?: 0)
+        assertEquals("The Cure", tags.albumArtist)
+        assertEquals(1, tags.disc)
+        assertEquals("Rock", tags.genre)
+        assertEquals(-7.25f, tags.trackGainDb ?: 0f, 0.001f)
         assertTrue(jpeg.contentEquals(tags.picture))
     }
 
@@ -131,7 +139,16 @@ class AiffAndId3Test {
     @Test fun readsAnAiffFileAndItsEmbeddedId3() {
         val comm = be16(2) + be32(44_100) + be16(16) +
             byteArrayOf(0x40, 0x0E, 0xAC.toByte(), 0x44, 0, 0, 0, 0, 0, 0)
-        val id3 = id3v23(listOf("TIT2" to textFrame("A Forest"), "TPE1" to textFrame("The Cure"), "TALB" to textFrame("Seventeen Seconds")))
+        val id3 = id3v23(
+            listOf(
+                "TIT2" to textFrame("A Forest"),
+                "TPE1" to textFrame("The Cure"),
+                "TALB" to textFrame("Seventeen Seconds"),
+                "TPE2" to textFrame("The Cure"),
+                "TPOS" to textFrame("1/1"),
+                "TCON" to textFrame("Post-punk"),
+            ),
+        )
         val body = chunk("COMM", comm) + chunk("SSND", ByteArray(8)) + chunk("ID3 ", id3)
         val file = "FORM".toByteArray() + be32(body.size.toLong()) + "AIFF".toByteArray() + body
         val parsed = Aiff.parse(Bytes(file))
@@ -141,6 +158,9 @@ class AiffAndId3Test {
         assertEquals("A Forest", parsed.tags.title)
         assertEquals("The Cure", parsed.tags.artist)
         assertEquals("Seventeen Seconds", parsed.tags.album)
+        assertEquals("The Cure", parsed.tags.albumArtist)
+        assertEquals(1, parsed.tags.disc)
+        assertEquals("Post-punk", parsed.tags.genre)
     }
 
     @Test fun readsAifcSowtCompressionWithoutChoking() {

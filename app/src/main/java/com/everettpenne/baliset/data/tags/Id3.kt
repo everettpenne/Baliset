@@ -1,5 +1,9 @@
 package com.everettpenne.baliset.data.tags
 
+import android.content.Context
+import android.net.Uri
+import java.io.FileInputStream
+import java.io.InputStream
 import java.nio.charset.Charset
 import kotlin.math.min
 
@@ -11,6 +15,13 @@ data class TagValues(
     val year: Int? = null,
     val track: Int? = null,
     val picture: ByteArray? = null,
+    /** The album artist (TPE2), which keeps guest tracks on their album. */
+    val albumArtist: String? = null,
+    val disc: Int? = null,
+    val genre: String? = null,
+    /** ReplayGain, when the file carries it; the fallback is analysing the PCM. */
+    val trackGainDb: Float? = null,
+    val trackPeak: Float? = null,
 )
 
 /**
@@ -21,6 +32,39 @@ data class TagValues(
  * network. Pure, so the parsing is unit-tested against hand-built tags.
  */
 object Id3 {
+    private const val MAX_READ = 8 * 1024 * 1024
+
+    /** Reads the ID3 tag at the start of a file, for its ReplayGain fields (Android's retriever does not expose TXXX). */
+    fun read(context: Context, uri: Uri): TagValues? = runCatching {
+        if (uri.scheme == "file") {
+            val path = uri.path ?: return null
+            FileInputStream(path).use { stream -> readTag(stream) }
+        } else {
+            val descriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
+            descriptor.use { pfd -> FileInputStream(pfd.fileDescriptor).use { stream -> readTag(stream) } }
+        }
+    }.getOrNull()
+
+    private fun readTag(stream: InputStream): TagValues? {
+        val header = ByteArray(10)
+        if (readFully(stream, header, header.size) < header.size) return null
+        if (header[0] != 'I'.code.toByte() || header[1] != 'D'.code.toByte() || header[2] != '3'.code.toByte()) return null
+        val size = min(syncSafe(header, 6), MAX_READ)
+        val body = ByteArray(size)
+        if (readFully(stream, body, size) < size) return null
+        return parse(header + body)
+    }
+
+    private fun readFully(stream: InputStream, target: ByteArray, length: Int): Int {
+        var read = 0
+        while (read < length) {
+            val count = stream.read(target, read, length - read)
+            if (count < 0) break
+            read += count
+        }
+        return read
+    }
+
     fun parse(data: ByteArray): TagValues? {
         if (data.size < 10) return null
         if (data[0] != 'I'.code.toByte() || data[1] != 'D'.code.toByte() || data[2] != '3'.code.toByte()) return null
@@ -44,6 +88,11 @@ object Id3 {
         var track: Int? = null
         var picture: ByteArray? = null
         var pictureIsFront = false
+        var albumArtist: String? = null
+        var disc: Int? = null
+        var genre: String? = null
+        var trackGainDb: Float? = null
+        var trackPeak: Float? = null
 
         while (position + 6 <= end) {
             if (body[position] == 0.toByte()) break
@@ -76,6 +125,15 @@ object Id3 {
                 "TAL", "TALB" -> album = text(frame)
                 "TYE", "TYER", "TDRC" -> year = text(frame)?.take(4)?.toIntOrNull()
                 "TRK", "TRCK" -> track = text(frame)?.substringBefore('/')?.trim()?.toIntOrNull()
+                "TP2", "TPE2" -> albumArtist = text(frame)
+                "TPA", "TPOS" -> disc = text(frame)?.substringBefore('/')?.trim()?.toIntOrNull()
+                "TCO", "TCON" -> genre = text(frame)
+                "TXX", "TXXX" -> userText(frame)?.let { (description, value) ->
+                    when (description.uppercase()) {
+                        "REPLAYGAIN_TRACK_GAIN" -> trackGainDb = gain(value)
+                        "REPLAYGAIN_TRACK_PEAK" -> trackPeak = value.toFloatOrNull()
+                    }
+                }
                 "PIC" -> pictureFrame(frame, major = 2)?.let { (bytes, front) ->
                     if (picture == null || (front && !pictureIsFront)) { picture = bytes; pictureIsFront = front }
                 }
@@ -85,8 +143,22 @@ object Id3 {
             }
             position += headerSize + frameSize
         }
-        if (title == null && artist == null && album == null && year == null && track == null && picture == null) return null
-        return TagValues(title, artist, album, year, track, picture)
+        if (title == null && artist == null && album == null && year == null && track == null && picture == null &&
+            albumArtist == null && disc == null && genre == null && trackGainDb == null
+        ) return null
+        return TagValues(
+            title = title,
+            artist = artist,
+            album = album,
+            year = year,
+            track = track,
+            picture = picture,
+            albumArtist = albumArtist,
+            disc = disc,
+            genre = genre,
+            trackGainDb = trackGainDb,
+            trackPeak = trackPeak,
+        )
     }
 
     /** The first text byte is the encoding; the rest is the value, minus its null terminator. */
@@ -119,6 +191,21 @@ object Id3 {
         if (offset >= frame.size) return null
         return frame.copyOfRange(offset, frame.size) to (type == 3)
     }
+
+    /** TXXX: encoding, a null-terminated description, then the value in the same encoding. */
+    private fun userText(frame: ByteArray): Pair<String, String>? {
+        if (frame.isEmpty()) return null
+        val encoding = frame[0].toInt() and 0xff
+        val end = if (encoding == 1 || encoding == 2) indexOfWideZero(frame, 1) else indexOfZero(frame, 1)
+        if (end < 0) return null
+        val description = decode(encoding, frame, 1, end - 1)
+        val valueStart = end + terminator(encoding)
+        if (valueStart >= frame.size) return null
+        return description to decode(encoding, frame, valueStart, frame.size - valueStart)
+    }
+
+    private fun gain(value: String): Float? =
+        value.trim().removeSuffix("dB").removeSuffix("db").trim().toFloatOrNull()
 
     private fun terminator(encoding: Int): Int = if (encoding == 1 || encoding == 2) 2 else 1
 

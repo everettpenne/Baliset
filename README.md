@@ -27,6 +27,10 @@ and Baliset plays the songs that are simply *there*.
   <img src="docs/images/aiff-songs.webp" width="180" alt="AIFF files from an Apple Music library, with their own tags, art and lengths">
   <img src="docs/images/aiff-now-playing.webp" width="180" alt="Playing a big-endian AIFF, with the cover from its ID3 chunk">
 </p>
+<p align="center">
+  <img src="docs/images/discs.webp" width="180" alt="A two-disc album, with Disc 1 and Disc 2 headers">
+  <img src="docs/images/playback.webp" width="180" alt="Volume leveling, crossfade and a measured library in Settings">
+</p>
 
 ## What it does
 
@@ -38,6 +42,15 @@ and Baliset plays the songs that are simply *there*.
   and a small Media3 extractor plays 16-bit PCM in both the usual big-endian AIFF and little-endian `sowt` AIFC, with seeking and
   queue transitions. No conversion, no copies, no network. (Android's media index does not list AIFF, so use **Choose a
   folder** for these libraries.)
+- **Albums, with their guests.** A folder is one album, and an album-artist tag (TPE2) always wins over the track credit. "Kali Uchis
+  Feat. Tyler, the Creator" and "Kali Uchis" share one album; the album shows "Kali Uchis", not six variants. Disc numbers (TPOS) are
+  read too, so a two-disc set is sorted and headed Disc 1 / Disc 2, and a "Various Artists" album is not linked to one artist.
+- **One loudness.** Volume leveling reads ReplayGain when a file has it, measures 16-bit AIFF PCM directly, and decodes MP3s (and other
+  compressed files) once with the platform codec. A target RMS of −18 dBFS and a peak ceiling keep quiet rips up and loud masters
+  down without clipping. Measuring is an explicit action with progress and Stop; the correction is stored only on the phone.
+- **Crossfade, or gapless.** Choose 3, 5, 8 or 12 seconds and the next track starts under the last seconds of the current one: a second
+  ExoPlayer ramps in while the first ramps out, and the session switches at the end. Off keeps the original gapless path. Audio focus
+  is managed once for both players, so calls and other apps still pause and duck the music.
 - **A player that keeps playing.** A Media3 `MediaSessionService` owns the sound: background playback, a media notification you can
   control, lock-screen and headset buttons, audio focus, "pause when headphones disconnect", gapless consecutive tracks, and a
   "previous restarts the song once it is past three seconds" rule.
@@ -133,8 +146,14 @@ without it: `BALISET_RELEASE_STORE_FILE`, `BALISET_RELEASE_STORE_PASSWORD`, `BAL
 ## Status and limits
 
 - **Baliset is a working name** for the app; the package id is `com.everettpenne.baliset`.
-- Version 0.3.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
+- Version 0.4.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
   dark themes; **it has not been run on a physical phone or a GrapheneOS device.**
+- Album identity was exercised with six guest-credited *Isolation* tracks (one album, "Kali Uchis"), a two-disc album (Disc 1 / Disc 2
+  headers and numbers), and the normal single-artist albums. Volume measurement covered 2 AIFFs and 7 MP3s in one pass, and a 5-second
+  crossfade from a 3:33 AIFF into the MP3 moved the session and the UI to the next track, then paused, resumed and skipped normally.
+- The code has 58 JVM tests, including the AIFF/ID3 readers, album grouping, loudness math and the gain processor.
+- The crossfade engine and its manual audio focus were tested on the emulator; phone-call and headphone focus changes were not.
+  An album split across separate folders (one folder per disc) still appears as separate albums; a single folder with disc tags works.
 - The cover lookup was exercised live against MusicBrainz and the Cover Art Archive (Kind of Blue, 94% match), as was the
   folder-cover order. MusicBrainz coverage is uneven for very new, very local and some classical releases; the candidate sheet is
   there for those.

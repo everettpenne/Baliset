@@ -144,6 +144,9 @@ class Library(private val context: Context) {
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.MediaColumns.ALBUM_ARTIST,
+            MediaStore.MediaColumns.DISC_NUMBER,
+            MediaStore.MediaColumns.GENRE,
         )
         // Every audio row Android has. Tags are taken from the index when it has them; a row the index has not finished reading
         // (or a file it never tagged) is read from the file itself, so the library is never empty just because the index is thin.
@@ -161,6 +164,9 @@ class Library(private val context: Context) {
                 var duration = cursor.getLong(5)
                 var trackNo = cursor.getString(6)?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0
                 var year = cursor.getInt(7)
+                var albumArtist = cursor.getString(11)?.takeIf { it.isNotBlank() && it != "<unknown>" }
+                var discNo = cursor.getString(12)?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0
+                var genre = cursor.getString(13)?.takeIf { it.isNotBlank() && it != "<unknown>" }
                 if (duration <= 0L || title.isBlank() || artist == UNKNOWN_ARTIST || album == UNKNOWN_ALBUM) {
                     val tags = readFileTags(uri, fileName)
                     if (title.isBlank()) title = tags.title
@@ -169,6 +175,9 @@ class Library(private val context: Context) {
                     if (duration <= 0L) duration = tags.durationMs
                     if (trackNo == 0) trackNo = tags.trackNo
                     if (year == 0) year = tags.year
+                    if (albumArtist == null) albumArtist = tags.albumArtist
+                    if (discNo == 0) discNo = tags.discNo
+                    if (genre == null) genre = tags.genre
                 }
                 // A notification or ringtone is not music; a track Android has not measured yet is kept and measured on play.
                 if (duration in 1..9_999) continue
@@ -179,6 +188,9 @@ class Library(private val context: Context) {
                     artist = artist,
                     album = album,
                     albumId = cursor.getLong(4),
+                    albumArtist = albumArtist,
+                    discNo = discNo,
+                    genre = genre,
                     durationMs = duration,
                     trackNo = trackNo,
                     year = year,
@@ -193,7 +205,17 @@ class Library(private val context: Context) {
     }
 
     /** Title, artist, album, length and numbers read out of the file itself, for a row the media index did not fill in. */
-    private data class FileTags(val title: String, val artist: String, val album: String, val durationMs: Long, val trackNo: Int, val year: Int)
+    private data class FileTags(
+        val title: String,
+        val artist: String,
+        val album: String,
+        val durationMs: Long,
+        val trackNo: Int,
+        val year: Int,
+        val albumArtist: String? = null,
+        val discNo: Int = 0,
+        val genre: String? = null,
+    )
 
     private fun readFileTags(uri: Uri, fileName: String): FileTags {
         val guess = guessName(fileName)
@@ -207,6 +229,9 @@ class Library(private val context: Context) {
                     durationMs = aiff.durationMs,
                     trackNo = aiff.tags.track ?: 0,
                     year = aiff.tags.year ?: 0,
+                    albumArtist = aiff.tags.albumArtist,
+                    discNo = aiff.tags.disc ?: 0,
+                    genre = aiff.tags.genre,
                 )
             }
         }
@@ -220,6 +245,9 @@ class Library(private val context: Context) {
                 durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
                 trackNo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0,
                 year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)?.take(4)?.toIntOrNull() ?: 0,
+                albumArtist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)?.takeIf { it.isNotBlank() },
+                discNo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0,
+                genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)?.takeIf { it.isNotBlank() },
             )
         } catch (_: Exception) {
             FileTags(guess.title, guess.artist, UNKNOWN_ALBUM, 0L, 0, 0)
@@ -266,7 +294,7 @@ class Library(private val context: Context) {
                         if (out.size >= MAX_TRACKS) break
                         if (!isAudio(entry.name, entry.mime)) continue
                         val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.id)
-                        out += readTags(uri, entry.name, entry.modified, coverUri)
+                        out += readTags(uri, entry.name, entry.modified, coverUri, folderId)
                         _scan.update { it.copy(found = out.size, done = out.size, total = 0) }
                     }
                 }
@@ -279,12 +307,13 @@ class Library(private val context: Context) {
         val out = ArrayList<Track>()
         val folders = ArrayDeque<File>().apply { add(dir) }
         while (folders.isNotEmpty() && out.size < MAX_TRACKS) {
-            val children = folders.removeFirst().listFiles() ?: continue
+            val folder = folders.removeFirst()
+            val children = folder.listFiles() ?: continue
             val cover = children.firstOrNull { it.isFile && isCoverFileName(it.name) }?.let { Uri.fromFile(it).toString() }
             for (child in children) {
                 if (child.isDirectory) folders += child
                 else if (isAudio(child.name, null)) {
-                    out += readTags(Uri.fromFile(child), child.name, child.lastModified(), cover)
+                    out += readTags(Uri.fromFile(child), child.name, child.lastModified(), cover, folder.absolutePath)
                     _scan.update { it.copy(found = out.size) }
                 }
             }
@@ -295,7 +324,7 @@ class Library(private val context: Context) {
     private fun isAudio(name: String, mime: String?): Boolean =
         mime?.startsWith("audio/") == true || name.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS
 
-    private fun readTags(uri: Uri, fileName: String, modified: Long, coverUri: String? = null): Track {
+    private fun readTags(uri: Uri, fileName: String, modified: Long, coverUri: String? = null, folder: String = ""): Track {
         val tags = readFileTags(uri, fileName)
         return Track(
             id = "d:${uri}",
@@ -303,6 +332,10 @@ class Library(private val context: Context) {
             title = tags.title,
             artist = tags.artist,
             album = tags.album,
+            albumArtist = tags.albumArtist,
+            discNo = tags.discNo,
+            genre = tags.genre,
+            folder = folder,
             durationMs = tags.durationMs,
             trackNo = tags.trackNo,
             year = tags.year,

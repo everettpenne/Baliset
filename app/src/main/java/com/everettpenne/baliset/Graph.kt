@@ -2,6 +2,7 @@ package com.everettpenne.baliset
 
 import android.content.Context
 import com.everettpenne.baliset.data.Library
+import com.everettpenne.baliset.data.Levels
 import com.everettpenne.baliset.data.Playlists
 import com.everettpenne.baliset.data.Settings
 import com.everettpenne.baliset.data.musicbrainz.CoverService
@@ -15,6 +16,7 @@ class Graph(context: Context) {
     val library = Library(context)
     val playlists = Playlists(context)
     val covers = CoverService(context)
+    val levels = Levels(context)
 }
 
 val Context.graph: Graph

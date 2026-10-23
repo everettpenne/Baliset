@@ -5,11 +5,27 @@ import android.net.Uri
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sqrt
 
 /** The tags and timing of an AIFF/AIFC file, as read from its chunks. */
-data class AiffTags(val tags: TagValues, val durationMs: Long, val compression: String)
+data class AiffTags(
+    val tags: TagValues,
+    val durationMs: Long,
+    val compression: String,
+    val channels: Int = 0,
+    val sampleRate: Int = 0,
+    val bits: Int = 0,
+    val dataStart: Long = 0L,
+    val dataEnd: Long = 0L,
+    val bigEndian: Boolean = true,
+)
+
+/** Loudness measured over the PCM, in dBFS relative to full scale. */
+data class AudioStats(val rmsDb: Float, val peakDb: Float)
 
 /** Random access to a file, for the chunk walker. Implemented over a channel on Android and a byte array in tests. */
 interface RandomReader {
@@ -54,6 +70,8 @@ object Aiff {
         var name: String? = null
         var author: String? = null
         var position = 12L
+        var audioStart = 0L
+        var audioEnd = 0L
 
         while (position + 8 <= reader.length) {
             val chunk = reader.read(position, 8) ?: break
@@ -75,6 +93,14 @@ object Aiff {
                         compression = String(data, 18, 4, Charsets.ISO_8859_1).trim('\u0000', ' ')
                     }
                 }
+                "SSND" -> {
+                    val sound = reader.read(dataStart, min(size, 8L).toInt())
+                    if (sound != null && sound.size >= 8) {
+                        val offset = readUInt32(sound, 0)
+                        audioStart = dataStart + 8 + offset
+                        audioEnd = dataStart + size
+                    }
+                }
                 "ID3 ", "id3 " -> {
                     val data = reader.read(dataStart, min(size, MAX_ID3.toLong()).toInt()) ?: break
                     id3 = Id3.parse(data)
@@ -94,9 +120,91 @@ object Aiff {
             year = id3?.year,
             track = id3?.track,
             picture = id3?.picture,
+            albumArtist = id3?.albumArtist,
+            disc = id3?.disc,
+            genre = id3?.genre,
+            trackGainDb = id3?.trackGainDb,
+            trackPeak = id3?.trackPeak,
         )
-        return AiffTags(merged, duration, compression)
+        val bigEndian = !compression.equals("sowt", ignoreCase = true)
+        return AiffTags(
+            tags = merged,
+            durationMs = duration,
+            compression = compression,
+            channels = channels,
+            sampleRate = rate.toInt(),
+            bits = bits,
+            dataStart = audioStart,
+            dataEnd = audioEnd,
+            bigEndian = bigEndian,
+        )
     }
+
+    /**
+     * Measures the PCM's RMS and peak, for tracks with no ReplayGain tag. Reads the file in chunks and never decodes more than
+     * 16-bit linear PCM; the library is 16-bit, and other encodings are left unmeasured rather than guessed.
+     */
+    fun analyze(
+        reader: RandomReader,
+        info: AiffTags,
+        onProgress: (Float) -> Unit = {},
+        cancelled: () -> Boolean = { false },
+    ): AudioStats? {
+        if (info.bits != 16 || info.dataEnd <= info.dataStart) return null
+        if (info.compression.uppercase() !in setOf("NONE", "TWOS", "SOWT")) return null
+        var sum = 0.0
+        var peak = 0.0
+        var count = 0L
+        val total = (info.dataEnd - info.dataStart).coerceAtLeast(1L)
+        var offset = info.dataStart
+        while (offset < info.dataEnd) {
+            if (cancelled()) return null
+            val chunk = reader.read(offset, min(CHUNK.toLong(), info.dataEnd - offset).toInt()) ?: break
+            if (chunk.isEmpty()) break
+            var i = 0
+            while (i + 1 < chunk.size) {
+                val first = chunk[i].toInt() and 0xff
+                val second = chunk[i + 1].toInt() and 0xff
+                val raw = if (info.bigEndian) (first shl 8) or second else (second shl 8) or first
+                val value = raw.toShort().toInt() / 32768.0
+                sum += value * value
+                val magnitude = abs(value)
+                if (magnitude > peak) peak = magnitude
+                count++
+                i += 2
+            }
+            offset += chunk.size
+            onProgress(((offset - info.dataStart).toFloat() / total).coerceIn(0f, 1f))
+        }
+        if (count == 0L) return null
+        val rms = sqrt(sum / count)
+        val rmsDb = if (rms > 0.0) (20.0 * log10(rms)).toFloat() else -120f
+        val peakDb = if (peak > 0.0) (20.0 * log10(peak)).toFloat() else -120f
+        return AudioStats(rmsDb, peakDb)
+    }
+
+    fun analyze(context: Context, uri: Uri, onProgress: (Float) -> Unit = {}, cancelled: () -> Boolean = { false }): AudioStats? =
+        runCatching {
+            if (uri.scheme == "file") {
+                val path = uri.path ?: return null
+                FileInputStream(path).use { stream ->
+                    val reader = ChannelReader(stream.channel)
+                    val info = parse(reader) ?: return null
+                    analyze(reader, info, onProgress, cancelled)
+                }
+            } else {
+                val descriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
+                descriptor.use { pfd ->
+                    FileInputStream(pfd.fileDescriptor).use { stream ->
+                        val reader = ChannelReader(stream.channel)
+                        val info = parse(reader) ?: return null
+                        analyze(reader, info, onProgress, cancelled)
+                    }
+                }
+            }
+        }.getOrNull()
+
+    private const val CHUNK = 1 shl 20
 
     private class ChannelReader(private val channel: FileChannel) : RandomReader {
         override val length: Long get() = channel.size()

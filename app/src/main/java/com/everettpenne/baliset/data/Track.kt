@@ -1,6 +1,7 @@
 package com.everettpenne.baliset.data
 
 import kotlinx.serialization.Serializable
+import com.everettpenne.baliset.util.primaryArtist
 
 /**
  * One piece of music, however it was found: a row in Android's media index or a document in a folder the person granted.
@@ -16,6 +17,13 @@ data class Track(
     val artist: String,
     val album: String,
     val albumId: Long = 0L,
+    /** The album's own artist (TPE2), when the tags have one; otherwise the album is gathered under the main artist of its tracks. */
+    val albumArtist: String? = null,
+    /** The disc number in a multi-disc set, 0 when unknown. */
+    val discNo: Int = 0,
+    val genre: String? = null,
+    /** For a folder scan, the album folder; it is what keeps a guest-heavy album together. Empty for the media index. */
+    val folder: String = "",
     val durationMs: Long = 0L,
     val trackNo: Int = 0,
     val year: Int = 0,
@@ -25,7 +33,12 @@ data class Track(
     /** A cover image sitting beside the file (cover.jpg and friends), when the folder scan found one. */
     val coverUri: String? = null,
 ) {
-    val albumKey: String get() = if (albumId > 0L) "m$albumId" else "d:$album|$artist"
+    val albumKey: String
+        get() = when {
+            albumId > 0L -> "m$albumId"
+            folder.isNotBlank() -> "d:$folder|${album.trim().lowercase()}"
+            else -> "d:${album.trim().lowercase()}|${albumArtist?.takeIf { it.isNotBlank() } ?: primaryArtist(artist)}"
+        }
 }
 
 /** An album, gathered from its tracks, with the track whose file the artwork is read from. */
@@ -36,6 +49,8 @@ data class Album(
     val year: Int,
     val artTrack: Track,
     val tracks: List<Track>,
+    /** True when the album is credited to several artists, so its artist line is not a link to one artist page. */
+    val compilation: Boolean = false,
 ) {
     val durationMs: Long get() = tracks.sumOf { it.durationMs }
 }
@@ -77,15 +92,33 @@ fun albumsOf(tracks: List<Track>): List<Album> = tracks
     .filter { it.album.isNotBlank() }
     .groupBy { it.albumKey }
     .map { (key, list) ->
-        val sorted = list.sortedWith(compareBy({ it.trackNo }, { it.title.lowercase() }))
-        val first = sorted.first()
-        Album(key = key, title = first.album, artist = first.artist, year = sorted.maxOf { it.year }, artTrack = first, tracks = sorted)
+        val sorted = list.sortedWith(compareBy({ it.discNo }, { it.trackNo }, { it.title.lowercase() }))
+        val albumArtist = mostCommon(list.mapNotNull { it.albumArtist?.trim()?.takeIf(String::isNotBlank) })
+        val artist = albumArtist ?: mostCommon(list.map { primaryArtist(it.artist) }) ?: sorted.first().artist
+        Album(
+            key = key,
+            title = sorted.first().album,
+            artist = artist,
+            year = list.firstOrNull { it.year > 0 }?.year ?: 0,
+            artTrack = sorted.first(),
+            tracks = sorted,
+            compilation = albumArtist?.equals("Various Artists", ignoreCase = true) == true,
+        )
     }
-    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+    .sortedWith(compareBy({ it.title.lowercase() }, { it.artist.lowercase() }))
+
+/** The value that appears most often, preferring the first one in a tie; null for an empty list. */
+private fun mostCommon(values: List<String>): String? {
+    if (values.isEmpty()) return null
+    val counts = values.groupingBy { it }.eachCount()
+    val best = counts.values.maxOrNull() ?: return null
+    return values.firstOrNull { counts[it] == best }
+}
 
 /** Artists in alphabetical order, with "Unknown artist" last rather than filed under U. */
 fun artistsOf(tracks: List<Track>): List<Artist> = tracks
-    .groupBy { it.artist }
+    .filter { it.artist.isNotBlank() }
+    .groupBy { primaryArtist(it.artist) }
     .map { (name, list) -> Artist(name, list.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })) }
     .sortedWith(compareBy<Artist> { it.name == UNKNOWN_ARTIST }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 

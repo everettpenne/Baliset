@@ -13,13 +13,16 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +42,8 @@ import com.everettpenne.glass.GlassButton
 import com.everettpenne.glass.GlassDropdownMenu
 import com.everettpenne.glass.GlassGroup
 import com.everettpenne.glass.GlassListRow
+import com.everettpenne.glass.GlassMenuItem
+import com.everettpenne.glass.GlassProgressBar
 import com.everettpenne.glass.GlassRowDivider
 import com.everettpenne.glass.GlassScreen
 import com.everettpenne.glass.GlassSheet
@@ -71,6 +76,11 @@ fun SettingsScreen() {
     var privacy by remember { mutableStateOf(false) }
     val consent by graph.settings.mbConsent.collectAsState()
     val coverJob by graph.covers.job.collectAsState()
+    val leveling by graph.settings.leveling.collectAsState()
+    val levels by graph.levels.levels.collectAsState()
+    val levelJob by graph.levels.state.collectAsState()
+    val crossfade by graph.settings.crossfadeMs.collectAsState()
+    var crossfadeMenu by remember { mutableStateOf(false) }
     var consentAsk by remember { mutableStateOf(false) }
     var coverData by remember { mutableStateOf(false) }
     val albums = remember(snapshot.tracks) { com.everettpenne.baliset.data.albumsOf(snapshot.tracks) }
@@ -163,6 +173,57 @@ fun SettingsScreen() {
                     )
                     Text(
                         "AIFF files are not in Android's media index; choose the folder for those libraries. Baliset reads their tags and cover art directly.",
+                        style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+
+            item("playback") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Playback", style = IosType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                    GlassGroup {
+                        GlassListRow(
+                            "Volume leveling",
+                            subtitle = if (leveling) "On — measured tracks play at the same loudness" else "Off",
+                            onClick = { graph.settings.setLeveling(!leveling) },
+                            leading = { Icon(Icons.Rounded.VolumeUp, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            trailing = { LiquidSwitch(leveling, { graph.settings.setLeveling(it) }) },
+                        )
+                        GlassRowDivider()
+                        Box {
+                            GlassListRow(
+                                "Crossfade",
+                                subtitle = if (crossfade == 0) "Off — albums play gapless" else "${crossfade / 1000} seconds",
+                                onClick = { crossfadeMenu = true },
+                                leading = { Icon(Icons.Rounded.SwapHoriz, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            )
+                            GlassDropdownMenu(crossfadeMenu, { crossfadeMenu = false }) {
+                                listOf(0, 3_000, 5_000, 8_000, 12_000).forEach { milliseconds ->
+                                    GlassMenuItem(
+                                        if (milliseconds == 0) "Off" else "${milliseconds / 1000} seconds",
+                                        { graph.settings.setCrossfadeMs(milliseconds); crossfadeMenu = false },
+                                    )
+                                }
+                            }
+                        }
+                        GlassRowDivider()
+                        GlassListRow(
+                            if (levelJob.running) "Stop measuring" else "Measure volume",
+                            subtitle = when {
+                                levelJob.running -> "${levelJob.done} of ${levelJob.total} · ${levelJob.phase}"
+                                levels.isEmpty() -> "Measure each track once, then level the library"
+                                else -> "${levels.size} tracks measured · measure any new ones"
+                            },
+                            onClick = { if (levelJob.running) graph.levels.cancel() else graph.levels.analyze(snapshot.tracks) },
+                            leading = { Icon(Icons.Rounded.GraphicEq, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            trailing = { if (levelJob.running) Text("Stop", style = IosType.footnote, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        )
+                    }
+                    if (levelJob.running && levelJob.total > 0) {
+                        GlassProgressBar(levelJob.done.toFloat() / levelJob.total)
+                    }
+                    Text(
+                        "ReplayGain is used when a file has it; AIFF is measured directly and compressed files are decoded once. Crossfade starts the next track under the last few seconds; off keeps albums gapless. Everything stays on this phone.",
                         style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp),
                     )
                 }

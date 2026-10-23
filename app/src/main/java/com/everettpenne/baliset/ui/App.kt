@@ -91,7 +91,7 @@ fun BalisetRoot(openUri: Uri? = null, debugFolder: String? = null) {
         }
 
         LaunchedEffect(Unit) {
-            Playback.start(context, graph.library, graph.settings)
+            Playback.start(context, graph.library, graph.settings, graph.levels)
             if (!BuildConfig.DEBUG) updater.checkOnLaunch()
         }
 

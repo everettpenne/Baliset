@@ -43,6 +43,14 @@ class Settings(context: Context) {
     private val _sleepMinutes = MutableStateFlow(prefs.getInt(KEY_SLEEP, 30))
     val sleepMinutes: StateFlow<Int> = _sleepMinutes.asStateFlow()
 
+    private val _leveling = MutableStateFlow(prefs.getBoolean(KEY_LEVELING, true))
+    /** On by default, but it only does anything for tracks that have been measured or carry ReplayGain. */
+    val leveling: StateFlow<Boolean> = _leveling.asStateFlow()
+
+    private val _crossfadeMs = MutableStateFlow(prefs.getInt(KEY_CROSSFADE, 0))
+    /** Overlap between tracks in milliseconds; 0 keeps the queue gapless. */
+    val crossfadeMs: StateFlow<Int> = _crossfadeMs.asStateFlow()
+
     fun setSource(source: String) {
         prefs.edit().putString(KEY_SOURCE, source).apply()
         _source.value = source
@@ -68,6 +76,16 @@ class Settings(context: Context) {
     fun setSleepMinutes(minutes: Int) {
         prefs.edit().putInt(KEY_SLEEP, minutes).apply()
         _sleepMinutes.value = minutes
+    }
+
+    fun setLeveling(value: Boolean) {
+        prefs.edit().putBoolean(KEY_LEVELING, value).apply()
+        _leveling.value = value
+    }
+
+    fun setCrossfadeMs(value: Int) {
+        prefs.edit().putInt(KEY_CROSSFADE, value).apply()
+        _crossfadeMs.value = value
     }
 
     /** Remembers a track as just played, newest first, without duplicates, and keeps the last ten. */
@@ -106,5 +124,7 @@ class Settings(context: Context) {
         const val KEY_LAST_POSITION = "last_position"
         const val KEY_SLEEP = "sleep_minutes"
         const val KEY_MB_CONSENT = "musicbrainz_consent"
+        const val KEY_LEVELING = "leveling"
+        const val KEY_CROSSFADE = "crossfade_ms"
     }
 }

@@ -104,7 +104,8 @@ fun AlbumScreen(key: String) {
                         album.artist,
                         style = IosType.subheadline,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { nav?.artist(album.artist) }.padding(vertical = 4.dp),
+                        modifier = (if (album.compilation) Modifier else Modifier.clickable { nav?.artist(album.artist) })
+                            .padding(vertical = 4.dp),
                     )
                     Text(
                         listOfNotNull(
@@ -133,16 +134,27 @@ fun AlbumScreen(key: String) {
                     Spacer(Modifier.height(6.dp))
                 }
             }
+            val multiDisc = album.tracks.map { it.discNo }.distinct().size > 1
             itemsIndexed(album.tracks, key = { _, track -> track.id }) { index, track ->
-                TrackRow(
-                    track = track,
-                    playing = now.track?.id == track.id,
-                    onClick = { Playback.play(album.tracks, index) },
-                    onLongClick = { actions?.show(track) },
-                    showArtwork = false,
-                    trackNumber = index + 1,
-                    subtitle = null,
-                )
+                Column {
+                    if (multiDisc && (index == 0 || track.discNo != album.tracks[index - 1].discNo)) {
+                        Text(
+                            "Disc " + (track.discNo.takeIf { it > 0 } ?: 1),
+                            style = IosType.footnote.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 10.dp, bottom = 2.dp),
+                        )
+                    }
+                    TrackRow(
+                        track = track,
+                        playing = now.track?.id == track.id,
+                        onClick = { Playback.play(album.tracks, index) },
+                        onLongClick = { actions?.show(track) },
+                        showArtwork = false,
+                        trackNumber = track.trackNo.takeIf { it > 0 } ?: (index + 1),
+                        subtitle = null,
+                    )
+                }
             }
         }
     }

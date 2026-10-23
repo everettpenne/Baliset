@@ -40,11 +40,11 @@ fun searchLibrary(tracks: List<Track>, query: String, limitPerKind: Int = 60): S
     }.sortedWith(compareBy({ it.first }, { sortKey(it.second.title) })).map { it.second }.take(limitPerKind)
 
     val albums = tracks.filter { rankOf(it.album) != NO_MATCH }.groupBy { it.albumKey }
-        .map { (key, list) -> key to list.sortedWith(compareBy({ it.trackNo }, { it.title })) }
+        .map { (key, list) -> key to list.sortedWith(compareBy({ it.discNo }, { it.trackNo }, { it.title })) }
         .sortedWith(compareBy({ minOf(rankOf(it.second.first().album), rankOf(it.second.first().artist)) }, { sortKey(it.second.first().album) }))
         .take(limitPerKind)
 
-    val artists = tracks.filter { rankOf(it.artist) != NO_MATCH }.groupBy { it.artist }
+    val artists = tracks.filter { rankOf(it.artist) != NO_MATCH }.groupBy { primaryArtist(it.artist) }
         .map { (name, list) -> name to list }
         .sortedWith(compareBy({ rankOf(it.first) }, { sortKey(it.first) }))
         .take(limitPerKind)

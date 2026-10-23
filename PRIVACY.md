@@ -11,6 +11,9 @@ Baliset is a local music player. It has no account, no server, no advertising an
   itself — on the phone, without a network request.
 - **Playback:** the file you choose, opened by the player. For AIFF, Baliset's own extractor parses the PCM chunks. Nothing else is read
   from it.
+- **Volume leveling:** only when you tap **Measure volume**, Baliset reads each track once — AIFF PCM directly, compressed files through
+  Android's decoder — to find its RMS and peak. The result is a gain in `levels.json`; the audio never leaves the phone and no analysis
+  runs in the background.
 
 Baliset does not read contacts, messages, photos, location, the clipboard, other apps' notifications or anything outside the audio
 files and the folder you choose.
@@ -22,6 +25,7 @@ files and the folder you choose.
 | The library list | `files/library.json` in the app's private storage | so opening the app is instant |
 | Cover art (one small JPEG per album) | `files/art/` | so lists scroll without reading files |
 | Which MusicBrainz release a cover came from | `files/cover-meta.json` | to show "Cover from MusicBrainz" and offer Reset |
+| A loudness correction for each measured track | `files/levels.json` | so volume leveling survives restarts |
 | Playlists and favourites | `files/collections.json` | your lists |
 | Source, folder, recent plays, last position, sleep length | shared preferences | remembered choices |
 

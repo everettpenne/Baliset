@@ -42,3 +42,18 @@ fun isAiffFileName(name: String): Boolean =
 fun fileNameOf(uri: String): String = runCatching {
     android.net.Uri.parse(uri).lastPathSegment.orEmpty()
 }.getOrDefault(uri.substringAfterLast('/'))
+
+/**
+ * The main artist of a track, without the featured guests: "Kali Uchis Feat. Tyler, the Creator" becomes "Kali Uchis".
+ *
+ * Used to gather an album and an artist page even when the tag writers spell the guests differently on every track. It is only a
+ * fallback: a real album-artist tag (TPE2) always wins, and the displayed track still keeps the full credit.
+ */
+fun primaryArtist(artist: String): String {
+    val trimmed = artist.trim()
+    if (trimmed.isEmpty()) return trimmed
+    val match = FEATURE_ARTIST.find(trimmed) ?: return trimmed
+    return trimmed.substring(0, match.range.first).trim().ifEmpty { trimmed }
+}
+
+private val FEATURE_ARTIST = Regex("(?i)\\s+(feat\\.?|ft\\.?|featuring)\\s+.*$")
