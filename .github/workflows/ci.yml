@@ -21,7 +21,6 @@ jobs:
           path: glass-src
       - name: Put Glass beside the app
         run: mv glass-src ../Glass
-      - name: Create debug keystore
-        run: keytool -genkeypair -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+      # debug.keystore is committed, so the debug build needs no key generation here.
       - name: Unit tests and debug build
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
