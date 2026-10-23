@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import com.everettpenne.baliset.util.guessName
+import com.everettpenne.baliset.util.isCoverFileName
 import java.io.File
 
 /**
@@ -88,7 +89,7 @@ class Library(private val context: Context) {
                 var done = 0
                 for ((key, list) in albums) {
                     val artTrack = list.minByOrNull { it.trackNo } ?: list.first()
-                    runCatching { Artwork.extract(context, key, artTrack.uri) }
+                    runCatching { Artwork.extract(context, key, artTrack.uri, artTrack.coverUri) }
                     done++
                     _scan.update { it.copy(done = done, total = albums.size) }
                 }
@@ -215,6 +216,8 @@ class Library(private val context: Context) {
 
     // ---- A folder the person granted ---------------------------------------------------------------------------------------
 
+    private data class Child(val id: String, val name: String, val mime: String?, val modified: Long)
+
     private fun queryTree(treeUri: String): List<Track> {
         val resolver = context.contentResolver
         val tree = Uri.parse(treeUri)
@@ -234,17 +237,23 @@ class Library(private val context: Context) {
             val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, folderId)
             runCatching {
                 resolver.query(children, projection, null, null, null)?.use { cursor ->
-                    while (cursor.moveToNext() && out.size < MAX_TRACKS) {
+                    val entries = ArrayList<Child>()
+                    while (cursor.moveToNext()) {
                         val id = cursor.getString(0) ?: continue
                         val name = cursor.getString(1) ?: id
                         val mime = cursor.getString(2)
-                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                            folders += id
-                        } else if (isAudio(name, mime)) {
-                            val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                            out += readTags(uri, name, cursor.getLong(3))
-                            _scan.update { it.copy(found = out.size, done = out.size, total = 0) }
-                        }
+                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) folders += id
+                        else entries += Child(id, name, mime, cursor.getLong(3))
+                    }
+                    // One cover image in the folder is used for every track in it, without reading each file's tags first.
+                    val cover = entries.firstOrNull { isCoverFileName(it.name) && it.mime?.startsWith("image/") != false }
+                    val coverUri = cover?.let { DocumentsContract.buildDocumentUriUsingTree(tree, it.id).toString() }
+                    for (entry in entries) {
+                        if (out.size >= MAX_TRACKS) break
+                        if (!isAudio(entry.name, entry.mime)) continue
+                        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.id)
+                        out += readTags(uri, entry.name, entry.modified, coverUri)
+                        _scan.update { it.copy(found = out.size, done = out.size, total = 0) }
                     }
                 }
             }.onFailure { if (visited == 1) throw it }
@@ -257,10 +266,11 @@ class Library(private val context: Context) {
         val folders = ArrayDeque<File>().apply { add(dir) }
         while (folders.isNotEmpty() && out.size < MAX_TRACKS) {
             val children = folders.removeFirst().listFiles() ?: continue
+            val cover = children.firstOrNull { it.isFile && isCoverFileName(it.name) }?.let { Uri.fromFile(it).toString() }
             for (child in children) {
                 if (child.isDirectory) folders += child
                 else if (isAudio(child.name, null)) {
-                    out += readTags(Uri.fromFile(child), child.name, child.lastModified())
+                    out += readTags(Uri.fromFile(child), child.name, child.lastModified(), cover)
                     _scan.update { it.copy(found = out.size) }
                 }
             }
@@ -271,7 +281,7 @@ class Library(private val context: Context) {
     private fun isAudio(name: String, mime: String?): Boolean =
         mime?.startsWith("audio/") == true || name.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS
 
-    private fun readTags(uri: Uri, fileName: String, modified: Long): Track {
+    private fun readTags(uri: Uri, fileName: String, modified: Long, coverUri: String? = null): Track {
         val tags = readFileTags(uri, fileName)
         return Track(
             id = "d:${uri}",
@@ -285,6 +295,7 @@ class Library(private val context: Context) {
             addedAt = modified,
             mime = context.contentResolver.getType(uri),
             fileName = fileName,
+            coverUri = coverUri,
         )
     }
 

@@ -3,8 +3,9 @@
 <img src="docs/images/icon.png" alt="Baliset app icon: a brass lyre on black" width="128" align="right" />
 
 **Baliset** is a private, local music player for Android with the iOS 26 liquid-glass look of the [Glass](https://github.com/everettpenne/Glass)
-suite. It plays the music already on your phone — no account, no ads, no upload — and hands the launcher a real media session, so
-Uno Launcher's dynamic island, media widget, lock screen and control panel can show and control it.
+suite. It plays the music already on your phone — no account, no ads, no upload — keeps the covers tidy (a folder's own art first, then
+MusicBrainz and the Cover Art Archive when you ask), and hands the launcher a real media session, so Uno Launcher's dynamic
+island, media widget, lock screen and control panel can show and control it.
 
 It is the listening leg of the suite: Seekur reads Reddit, Spice plays Jellyfin, Thumper plays podcasts and feeds, Sietch opens files,
 and Baliset plays the songs that are simply *there*.
@@ -20,6 +21,7 @@ and Baliset plays the songs that are simply *there*.
   <img src="docs/images/queue.webp" width="180" alt="Up Next, with drag handles">
   <img src="docs/images/search.webp" width="180" alt="Search across songs, albums and artists">
   <img src="docs/images/settings.webp" width="180" alt="Settings, grouped like the rest of the suite">
+  <img src="docs/images/cover-finder.webp" width="180" alt="Finding a cover on MusicBrainz">
 </p>
 
 ## What it does
@@ -35,12 +37,37 @@ and Baliset plays the songs that are simply *there*.
 - **Playlists and favourites.** Make a list, add songs from anywhere with a long press, rename or delete it, and keep a heart on the
   tracks you love. Both live only on the phone.
 - **Jump back in.** The last song is offered where it stopped, and Recently played keeps the last ten.
+- **Covers that keep themselves.** A `cover.jpg` (or folder/front/album/artwork) beside the music wins, then the file's own art;
+  when an album has neither, **Find cover art** on the album searches MusicBrainz, shows the candidate releases with a match
+  confidence, and downloads the chosen front cover from the Cover Art Archive. **Settings → Album art → Fill missing covers** does
+  the safe cases for the whole library, one request a second, and only writes a confident match.
 - **A friendly Now Playing.** Blurred cover, a scrubber you can drag, five controls in the usual places, Up Next, a sleep timer
   (15 / 30 / 45 / 60 minutes, or the end of the track) and a menu to reach the album, the artist or a playlist.
 - **Search as you type** across songs, albums and artists, with accents and case ignored and the best matches first.
 - **The launcher's island, for free.** Baliset publishes the title, artist, album, cover bitmap and duration on its media session. Uno
   Launcher reads exactly those, so the island's playing card, the media widget, the control panel and the paused-track memory all work
   with no launcher code and no special integration.
+
+## Covers and MusicBrainz
+
+Covers are kept as one small JPEG per album in the app's private storage, in this order:
+
+1. an image beside the music named `cover`, `folder`, `front`, `album`, `albumart`, `artwork` or `thumb` (jpg, jpeg, png, webp or bmp);
+2. Android's thumbnail of the file (its embedded cover);
+3. a cover you pick from MusicBrainz.
+
+To use the last one, open an album, tap ••• → **Find cover art**. The first time it explains what will be sent; after that it searches
+MusicBrainz for the album's title and artist, ranks the editions against the track count and year, and shows up to four candidates
+with a small preview and a match percentage. Nothing is written until you tap **Use**. The album then says **Cover from MusicBrainz**
+under its title, and ••• → **Reset cover** puts it back the way the files have it.
+
+**Settings → Album art** has the switch (off until you ask), **Fill missing covers** for the library-wide pass (only albums with no
+cover, only matches of 74% or better, with progress and Stop), and the data credits.
+
+Matching is honest about what it is: title, artist, track count and year, with the release group's artwork because editions share
+it. It is very good for well-documented albums and deliberately cautious elsewhere — a wrong cover is worse than a placeholder.
+Nothing is ever written into your music files. The only network traffic is to `musicbrainz.org` and `coverartarchive.org`, one
+request a second, with a `User-Agent` that names the app.
 
 ## Install
 
@@ -63,6 +90,7 @@ download to Android's installer, which always asks first.
 | Jump to the album or artist | Hold a song, or use the ••• menu in the player |
 | Sleep | In the player tap **Sleep**, and choose a length or the end of the track |
 | Rescan or change source | **Settings → Rescan now**, or the Folder row to choose another folder |
+| Fix a missing cover | Album ••• → **Find cover art**, or **Settings → Album art → Fill missing covers** |
 
 ## Glass
 
@@ -95,8 +123,11 @@ without it: `BALISET_RELEASE_STORE_FILE`, `BALISET_RELEASE_STORE_PASSWORD`, `BAL
 ## Status and limits
 
 - **Baliset is a working name** for the app; the package id is `com.everettpenne.baliset`.
-- Version 0.1.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
+- Version 0.2.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
   dark themes; **it has not been run on a physical phone or a GrapheneOS device.**
+- The cover lookup was exercised live against MusicBrainz and the Cover Art Archive (Kind of Blue, 94% match), as was the
+  folder-cover order. MusicBrainz coverage is uneven for very new, very local and some classical releases; the candidate sheet is
+  there for those.
 - The phone-index route is implemented, but the test emulator's media index exposed the pushed files without tags or `is_music`, so the
   screenshots use the folder route (the same scanner, reading each file's tags). On a phone whose index is populated, **Scan my phone**
   reads it; if the index is empty, the welcome page points you at **Choose a folder**.

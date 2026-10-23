@@ -4,9 +4,12 @@ import com.everettpenne.baliset.util.cleanFileName
 import com.everettpenne.baliset.util.clock
 import com.everettpenne.baliset.util.countWord
 import com.everettpenne.baliset.util.guessName
+import com.everettpenne.baliset.util.isCoverFileName
 import com.everettpenne.baliset.util.lengthWords
 import com.everettpenne.baliset.util.sortKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FormatAndNamesTest {
@@ -51,5 +54,14 @@ class FormatAndNamesTest {
         assertEquals("Artist" to "Title", guessName("01 - Artist - Title.mp3").let { it.artist to it.title })
         assertEquals("Unknown artist" to "Paper Moon", guessName("06 - Paper Moon.mp3").let { it.artist to it.title })
         assertEquals("Title Only", guessName("Title Only.mp3").title)
+    }
+
+    @Test fun recognisesConventionalCoverNames() {
+        listOf("cover.jpg", "Folder.PNG", "front.webp", "album.jpeg", "albumart.png", "artwork.bmp").forEach {
+            assertTrue(it, isCoverFileName(it))
+        }
+        listOf("cover.txt", "disco.jpg", "cover", "my-cover.jpg", "front.jpg.bak").forEach {
+            assertFalse(it, isCoverFileName(it))
+        }
     }
 }

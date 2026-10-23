@@ -22,6 +22,8 @@ data class Track(
     val addedAt: Long = 0L,
     val mime: String? = null,
     val fileName: String = "",
+    /** A cover image sitting beside the file (cover.jpg and friends), when the folder scan found one. */
+    val coverUri: String? = null,
 ) {
     val albumKey: String get() = if (albumId > 0L) "m$albumId" else "d:$album|$artist"
 }

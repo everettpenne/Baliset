@@ -10,6 +10,11 @@ Baliset is MIT-licensed. It builds on these projects, with thanks.
 | [Jetpack Compose](https://developer.android.com/compose) and AndroidX | the UI toolkit and support libraries | Apache-2.0 |
 | [Kotlin](https://kotlinlang.org) and kotlinx.coroutines / serialization | language and concurrency | Apache-2.0 |
 | [Inter](https://github.com/rsms/inter) | the typeface | SIL Open Font License 1.1 |
+| [MusicBrainz](https://musicbrainz.org) | release metadata for the optional cover lookup | core data CC0; supplementary data CC BY-NC-SA 3.0 |
+| [Cover Art Archive](https://coverartarchive.org) | cover images for the optional cover lookup | per-image licences, set by their uploaders |
+
+MusicBrainz and the Cover Art Archive are run by the MetaBrainz Foundation; Baliset is not affiliated with it. Cover images are
+downloaded to the phone only when the person asks for them.
 
 No Google Play services, Firebase, analytics, advertising or crash-reporting code is included.
 

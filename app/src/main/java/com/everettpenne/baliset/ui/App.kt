@@ -28,11 +28,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.everettpenne.baliset.BuildConfig
-import com.everettpenne.baliset.data.albumsOf
 import com.everettpenne.baliset.graph
 import com.everettpenne.baliset.playback.Playback
 import com.everettpenne.baliset.ui.components.LocalTrackActions
-import com.everettpenne.baliset.ui.components.LocalArtworkEpoch
 import com.everettpenne.baliset.ui.components.TrackActionSheet
 import com.everettpenne.baliset.ui.components.TrackActionsState
 import com.everettpenne.baliset.ui.components.rememberArtwork
@@ -158,7 +156,6 @@ fun BalisetRoot(openUri: Uri? = null, debugFolder: String? = null) {
             LocalNav provides nav,
             LocalTrackActions provides actions,
             LocalUpdater provides updater,
-            LocalArtworkEpoch provides snapshot.scannedAt,
         ) {
             Box(Modifier.fillMaxSize()) {
                 // The page colour as a backdrop recorded beside the screens, so nothing samples a layer containing itself.

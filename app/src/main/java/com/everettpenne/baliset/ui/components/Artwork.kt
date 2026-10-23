@@ -10,7 +10,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,15 +23,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.everettpenne.baliset.data.Artwork
 
-/** Bumped when the library is rescanned, so cached covers reload once the artwork pass has written new files. */
-val LocalArtworkEpoch = staticCompositionLocalOf { 0L }
-
-/** The decoded cover for an album, loaded off the main thread and remembered for the composition. */
+/**
+ * The decoded cover for an album, loaded off the main thread and remembered for the composition. It also reads
+ * [Artwork.revision], so a cover fetched from MusicBrainz (or reset) shows up at once without leaving and reopening the page.
+ */
 @Composable
 fun rememberArtwork(albumKey: String?): ImageBitmap? {
     val context = LocalContext.current
-    val epoch = LocalArtworkEpoch.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, albumKey, epoch) {
+    val revision = Artwork.revision
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, albumKey, revision) {
         value = albumKey?.let { key -> Artwork.load(context, key)?.asImageBitmap() }
     }
     return bitmap

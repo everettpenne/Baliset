@@ -7,6 +7,9 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.LruCache
 import android.util.Size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -16,14 +19,18 @@ import java.security.MessageDigest
 /**
  * Album artwork, read once per album and kept as a small JPEG in the app's private storage.
  *
- * Music files carry their cover in their tags, so the picture is read when the library is scanned and cached under the album's key.
- * Lists then load a decoded bitmap off the main thread, and the media session uses the same JPEG bytes, which is how the lock screen,
- * the notification and Uno Launcher's island get a cover without the player loading every track's picture.
+ * The order is deliberately local first: a cover image in the folder (cover.jpg, folder.jpg, …), then Android's thumbnail
+ * (which gives an indexed file's embedded cover), then the file's own tags. A cover chosen from the Cover Art Archive is
+ * written through [apply] and treated like any other, so a rescan does not replace it.
  */
 object Artwork {
     private const val MAX_PX = 640
     private const val JPEG_QUALITY = 86
     private const val MEMORY_BITMAPS = 24
+
+    /** Bumped whenever a cover is written or deleted, so rememberArtwork reloads without a rescan. */
+    var revision by mutableStateOf(0L)
+        private set
 
     private val memory = object : LruCache<String, Bitmap>(MEMORY_BITMAPS) {
         override fun sizeOf(key: String, value: Bitmap): Int = 1
@@ -53,24 +60,49 @@ object Artwork {
         if (!cached.isFile) null else runCatching { cached.readBytes() }.getOrNull()
     }
 
-    /** Reads and saves a cover for the album, if the file has one. Returns true when something was written. */
-    suspend fun extract(context: Context, albumKey: String, uri: String): Boolean = withContext(Dispatchers.IO) {
+    /** Reads and saves a cover for the album: folder image, then Android's thumbnail, then the file's own tags. */
+    suspend fun extract(context: Context, albumKey: String, uri: String, coverUri: String? = null): Boolean = withContext(Dispatchers.IO) {
         if (has(context, albumKey)) return@withContext true
-        val picture = runCatching { thumbnail(context, uri) }.getOrNull() ?: embedded(context, uri)
+        val picture = coverUri?.let { decodeUri(context, it) }
+            ?: runCatching { thumbnail(context, uri) }.getOrNull()
+            ?: embedded(context, uri)
         if (picture == null) return@withContext false
         write(context, albumKey, picture)
+    }
+
+    /** Writes cover bytes fetched from elsewhere (the Cover Art Archive) through the same scaling and cache. */
+    suspend fun apply(context: Context, albumKey: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        val bitmap = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull() ?: return@withContext false
+        write(context, albumKey, bitmap)
+    }
+
+    /** Forgets one album's cover, so a reset or the next scan can read the file again. */
+    fun delete(context: Context, albumKey: String) {
+        memory.remove(albumKey)
+        runCatching { file(context, albumKey).delete() }
+        revision++
     }
 
     private fun write(context: Context, albumKey: String, picture: Bitmap): Boolean {
         val scaled = scaleDown(picture, MAX_PX)
         val bytes = ByteArrayOutputStream().also { scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }.toByteArray()
         val target = file(context, albumKey)
-        return runCatching {
+        val written = runCatching {
             val temporary = File(target.parentFile, target.name + ".tmp")
             temporary.writeBytes(bytes)
             temporary.renameTo(target) || run { target.delete(); temporary.renameTo(target) }
         }.getOrDefault(false)
+        if (written) {
+            memory.put(albumKey, scaled)
+            revision++
+        }
+        return written
     }
+
+    /** Decodes a cover file found beside the music (a SAF document or a plain file). */
+    private fun decodeUri(context: Context, uri: String): Bitmap? = runCatching {
+        context.contentResolver.openInputStream(Uri.parse(uri))?.use { BitmapFactory.decodeStream(it) }
+    }.getOrNull()
 
     /** Android's own media thumbnail; for an audio row this is the album cover. */
     private fun thumbnail(context: Context, uri: String): Bitmap? =
@@ -101,5 +133,6 @@ object Artwork {
     fun clear(context: Context) {
         memory.evictAll()
         dir(context).listFiles()?.forEach { runCatching { it.delete() } }
+        revision++
     }
 }

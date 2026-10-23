@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.everettpenne.baliset.data.Album
+import com.everettpenne.baliset.data.Artwork
 import com.everettpenne.baliset.data.albumsOf
 import com.everettpenne.baliset.graph
 import com.everettpenne.baliset.playback.Playback
@@ -29,6 +32,7 @@ import com.everettpenne.baliset.ui.components.AlbumArt
 import com.everettpenne.baliset.ui.components.AlbumShelf
 import com.everettpenne.baliset.ui.components.LocalTrackActions
 import com.everettpenne.baliset.ui.components.TrackRow
+import kotlinx.coroutines.launch
 import com.everettpenne.baliset.util.countWord
 import com.everettpenne.baliset.util.lengthWords
 import com.everettpenne.glass.GlassButton
@@ -53,6 +57,8 @@ fun AlbumScreen(key: String) {
     val albums = remember(snapshot.tracks) { albumsOf(snapshot.tracks) }
     val album: Album? = albums.firstOrNull { it.key == key }
     var menu by remember { mutableStateOf(false) }
+    var findCover by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     GlassScreen(bars = {
         GlassCenteredTopBar("Album", onBack = { nav?.back() }, trailing = {
@@ -65,6 +71,16 @@ fun AlbumScreen(key: String) {
                         menu = false
                         album?.tracks?.forEach { Playback.addToQueue(it) }
                     }, icon = Icons.Rounded.QueueMusic)
+                    GlassMenuItem("Find cover art", { menu = false; findCover = true }, icon = Icons.Rounded.Image)
+                    if (graph.covers.info(key) != null) {
+                        GlassMenuItem("Reset cover", {
+                            menu = false
+                            scope.launch {
+                                graph.covers.forget(key)
+                                album?.let { current -> Artwork.extract(context, current.key, current.artTrack.uri, current.artTrack.coverUri) }
+                            }
+                        }, icon = Icons.Rounded.Restore)
+                    }
                 }
             }
         })
@@ -98,6 +114,13 @@ fun AlbumScreen(key: String) {
                         ).joinToString(" · "),
                         style = IosType.footnote, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    graph.covers.info(album.key)?.let { info ->
+                        Text(
+                            "Cover from MusicBrainz · ${info.title}" + (if (info.year > 0) " (${info.year})" else ""),
+                            style = IosType.caption1, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center,
+                            modifier = Modifier.clickable { findCover = true }.padding(top = 6.dp),
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         GlassButton({ Playback.playAll(album.tracks) }, Modifier.weight(1f), prominent = true) {
@@ -123,6 +146,7 @@ fun AlbumScreen(key: String) {
             }
         }
     }
+    if (findCover && album != null) CoverSheet(album, onDismiss = { findCover = false })
 }
 
 /** One artist: their portrait, everything they have here, their albums, and every song. */

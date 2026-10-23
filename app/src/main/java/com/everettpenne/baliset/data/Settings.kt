@@ -36,6 +36,10 @@ class Settings(context: Context) {
     private val _lastPosition = MutableStateFlow(prefs.getLong(KEY_LAST_POSITION, 0L))
     val lastPosition: StateFlow<Long> = _lastPosition.asStateFlow()
 
+    private val _mbConsent = MutableStateFlow(prefs.getBoolean(KEY_MB_CONSENT, false))
+    /** Off until the person asks for a cover lookup; the only feature that talks to MusicBrainz. */
+    val mbConsent: StateFlow<Boolean> = _mbConsent.asStateFlow()
+
     private val _sleepMinutes = MutableStateFlow(prefs.getInt(KEY_SLEEP, 30))
     val sleepMinutes: StateFlow<Int> = _sleepMinutes.asStateFlow()
 
@@ -54,6 +58,11 @@ class Settings(context: Context) {
     fun setWelcomeSeen(seen: Boolean = true) {
         prefs.edit().putBoolean(KEY_WELCOME, seen).apply()
         _welcomeSeen.value = seen
+    }
+
+    fun setMbConsent(value: Boolean) {
+        prefs.edit().putBoolean(KEY_MB_CONSENT, value).apply()
+        _mbConsent.value = value
     }
 
     fun setSleepMinutes(minutes: Int) {
@@ -96,5 +105,6 @@ class Settings(context: Context) {
         const val KEY_LAST_TRACK = "last_track"
         const val KEY_LAST_POSITION = "last_position"
         const val KEY_SLEEP = "sleep_minutes"
+        const val KEY_MB_CONSENT = "musicbrainz_consent"
     }
 }

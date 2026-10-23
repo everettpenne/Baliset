@@ -22,3 +22,14 @@ fun guessName(fileName: String, unknownArtist: String = "Unknown artist"): NameG
         else -> NameGuess(unknownArtist, clean.ifBlank { fileName })
     }
 }
+
+/**
+ * True for the names music folders conventionally use for their cover. Case-insensitive, and only image extensions, so a
+ * stray "cover.txt" beside the album is not treated as artwork.
+ */
+fun isCoverFileName(name: String): Boolean {
+    val extension = name.substringAfterLast('.', "").lowercase()
+    if (extension !in setOf("jpg", "jpeg", "png", "webp", "bmp")) return false
+    val base = name.substringBeforeLast('.').lowercase()
+    return base in setOf("cover", "folder", "front", "album", "albumart", "artwork", "thumb")
+}

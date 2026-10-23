@@ -4,6 +4,7 @@ import android.content.Context
 import com.everettpenne.baliset.data.Library
 import com.everettpenne.baliset.data.Playlists
 import com.everettpenne.baliset.data.Settings
+import com.everettpenne.baliset.data.musicbrainz.CoverService
 
 /**
  * The app's few long-lived objects, made once in [BalisetApp] and reached from any screen. There is no framework here on purpose: one
@@ -13,6 +14,7 @@ class Graph(context: Context) {
     val settings = Settings(context)
     val library = Library(context)
     val playlists = Playlists(context)
+    val covers = CoverService(context)
 }
 
 val Context.graph: Graph

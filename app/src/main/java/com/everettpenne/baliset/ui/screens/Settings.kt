@@ -9,9 +9,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Refresh
@@ -41,6 +44,7 @@ import com.everettpenne.glass.GlassScreen
 import com.everettpenne.glass.GlassSheet
 import com.everettpenne.glass.GlassTopBar
 import com.everettpenne.glass.IosType
+import com.everettpenne.glass.LiquidSwitch
 import com.everettpenne.updater.LocalUpdater
 import com.everettpenne.updater.collectStatus
 import com.everettpenne.glass.contentBottomPadding
@@ -65,6 +69,17 @@ fun SettingsScreen() {
     val updateStatus = if (updater != null) updater.collectStatus() else ""
     var removing by remember { mutableStateOf(false) }
     var privacy by remember { mutableStateOf(false) }
+    val consent by graph.settings.mbConsent.collectAsState()
+    val coverJob by graph.covers.job.collectAsState()
+    var consentAsk by remember { mutableStateOf(false) }
+    var coverData by remember { mutableStateOf(false) }
+    val albums = remember(snapshot.tracks) { com.everettpenne.baliset.data.albumsOf(snapshot.tracks) }
+    val coverSubtitle = when {
+        coverJob.running -> "Finding ${coverJob.done} of ${coverJob.total}" + (coverJob.current.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+        coverJob.error != null -> coverJob.error!!
+        coverJob.finished -> "Added ${coverJob.applied} cover" + (if (coverJob.applied == 1) "" else "s") + (if (coverJob.skipped > 0) " · ${coverJob.skipped} skipped" else "")
+        else -> "Find art for albums with no cover"
+    }
     val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -149,6 +164,46 @@ fun SettingsScreen() {
                 }
             }
 
+            item("art") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Album art", style = IosType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                    GlassGroup {
+                        GlassListRow(
+                            "MusicBrainz covers",
+                            subtitle = if (consent) "On — only when you ask" else "Off — file and folder art only",
+                            onClick = { if (consent) graph.settings.setMbConsent(false) else consentAsk = true },
+                            leading = { Icon(Icons.Rounded.Image, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            trailing = { LiquidSwitch(consent, { on -> if (on && !consent) consentAsk = true else graph.settings.setMbConsent(on) }) },
+                        )
+                        GlassRowDivider()
+                        GlassListRow(
+                            "Fill missing covers",
+                            subtitle = coverSubtitle,
+                            onClick = {
+                                when {
+                                    coverJob.running -> graph.covers.cancel()
+                                    !consent -> consentAsk = true
+                                    else -> graph.covers.fillMissing(albums)
+                                }
+                            },
+                            leading = { Icon(Icons.Rounded.AutoAwesome, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            trailing = { if (coverJob.running) Text("Stop", style = IosType.footnote, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        )
+                        GlassRowDivider()
+                        GlassListRow(
+                            "Cover data",
+                            subtitle = "MusicBrainz and the Cover Art Archive",
+                            onClick = { coverData = true },
+                            leading = { Icon(Icons.Rounded.Info, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                        )
+                    }
+                    Text(
+                        "A folder's cover.jpg (or folder/front/album.jpg) is used first, then the file's own art, then MusicBrainz when you ask. Covers stay on this phone.",
+                        style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+            }
+
             item("about") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("About", style = IosType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
@@ -183,6 +238,21 @@ fun SettingsScreen() {
         "Remove library?", "Baliset forgets the scanned list and its cached artwork. The music files themselves stay where they are.",
         "Remove", { graph.library.clear(); removing = false }, { removing = false }, destructive = true,
     )
+
+    if (consentAsk) GlassAlert(
+        "MusicBrainz covers?",
+        "Baliset will send album and artist names to musicbrainz.org and download artwork from the Cover Art Archive. Nothing about you is sent, and only the albums you ask about are looked up. You can turn this off at any time.",
+        "Turn on", { graph.settings.setMbConsent(true); consentAsk = false }, { consentAsk = false }, dismissLabel = "Not now",
+    )
+
+    if (coverData) GlassSheet(onDismiss = { coverData = false }) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Cover data", style = IosType.title3.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
+            Text("Artwork comes from the Cover Art Archive; the release matching data comes from MusicBrainz. Both are run by the MetaBrainz Foundation.", style = IosType.subheadline, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("MusicBrainz's core data is CC0 and its supplementary data is CC BY-NC-SA. Each cover image has its own licence. Baliset downloads a copy to this phone and uploads nothing.", style = IosType.subheadline, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            GlassButton("Done", { coverData = false }, Modifier.fillMaxWidth(), prominent = true)
+        }
+    }
 
     if (privacy) GlassSheet(onDismiss = { privacy = false }) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -19,6 +19,7 @@ files and the folder you choose.
 | --- | --- | --- |
 | The library list | `files/library.json` in the app's private storage | so opening the app is instant |
 | Cover art (one small JPEG per album) | `files/art/` | so lists scroll without reading files |
+| Which MusicBrainz release a cover came from | `files/cover-meta.json` | to show "Cover from MusicBrainz" and offer Reset |
 | Playlists and favourites | `files/collections.json` | your lists |
 | Source, folder, recent plays, last position, sleep length | shared preferences | remembered choices |
 
@@ -27,10 +28,21 @@ storage removes all of it. The music files themselves are never modified.
 
 ## Network
 
-The app declares `INTERNET` only for the shared Glass updater. A request goes to `api.github.com` (repositories
-`everettpenne/Baliset`) **only when you tap "Check for updates"**, and, in release builds, once quietly at launch to see whether a
-newer release exists. Nothing about you or your library is sent; the request is the same public release listing anyone can open in a
-browser. Revoking the Network permission leaves everything except updates working.
+The app declares `INTERNET` for two things, both optional and both off until you ask.
+
+**Updates.** A request goes to `api.github.com` (repository `everettpenne/Baliset`) **only when you tap "Check for updates"**, and,
+in release builds, once quietly at launch to see whether a newer release exists. Nothing about you or your library is sent; the
+request is the same public release listing anyone can open in a browser.
+
+**Cover art.** With **MusicBrainz covers** turned on, and only when you tap **Find cover art** on an album or **Fill missing covers**,
+Baliset sends that album's **title and artist** to `musicbrainz.org` and downloads artwork from `coverartarchive.org` (which serves
+the image from `archive.org`). It sends no account, no device identifier and no other part of your library; the `User-Agent` says
+`Baliset/<version>` with the project's URL so the service can contact the project, as MusicBrainz requires. Requests are spaced at
+least a second apart, answers are kept only as the chosen release's title, artist, year and IDs in `cover-meta.json`, and no query
+history is stored. Turning the switch off stops all of it.
+
+Revoking the Network permission leaves everything except the updater and the cover lookup working; folder covers, embedded covers
+and playback are entirely local.
 
 ## Permissions
 
@@ -39,7 +51,7 @@ browser. Revoking the Network permission leaves everything except updates workin
 - `POST_NOTIFICATIONS` — for the playback notification (Android 13+). Asked once, when playback first starts. Playback works without
   it; the notification is how another app or the lock screen controls the session.
 - `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `WAKE_LOCK` — keep music playing with the screen off.
-- `INTERNET` — the updater only, as above.
+- `INTERNET` — the updater and, if you turn it on, the MusicBrainz cover lookup, as above.
 - `REQUEST_INSTALL_PACKAGES` (from the Glass updater library) — to hand a downloaded update to Android's installer, which asks you to
   confirm.
 
