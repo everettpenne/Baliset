@@ -3,9 +3,10 @@
 <img src="docs/images/icon.png" alt="Baliset app icon: a brass lyre on black" width="128" align="right" />
 
 **Baliset** is a private, local music player for Android with the iOS 26 liquid-glass look of the [Glass](https://github.com/everettpenne/Glass)
-suite. It plays the music already on your phone — no account, no ads, no upload — including the AIFF files an Apple Music library is made
-of, keeps the covers tidy (a folder's own art first, then MusicBrainz and the Cover Art Archive when you ask), and hands the
+suite. It plays the music already on your phone — no account of ours, no ads, no upload — including the AIFF files an Apple Music library
+is made of, keeps the covers tidy (a folder's own art first, then MusicBrainz and the Cover Art Archive when you ask), and hands the
 launcher a real media session, so Uno Launcher's dynamic island, media widget, lock screen and control panel can show and control it.
+If you run a Jellyfin server, you can also stream and download from it, with an encrypted session and no cloud in between.
 
 It is the listening leg of the suite: Seekur reads Reddit, Spice plays Jellyfin, Thumper plays podcasts and feeds, Sietch opens files,
 and Baliset plays the songs that are simply *there*.
@@ -32,6 +33,10 @@ and Baliset plays the songs that are simply *there*.
   <img src="docs/images/playback.webp" width="180" alt="Volume leveling, crossfade and a measured library in Settings">
   <img src="docs/images/library-check.webp" width="180" alt="The library check, listing albums that still need a cover">
 </p>
+<p align="center">
+  <img src="docs/images/jellyfin.webp" width="180" alt="Albums from a Jellyfin server">
+  <img src="docs/images/jellyfin-downloads.webp" width="180" alt="Jellyfin downloads, ready offline">
+</p>
 
 ## What it does
 
@@ -46,6 +51,11 @@ and Baliset plays the songs that are simply *there*.
 - **Albums, with their guests.** A folder is one album, and an album-artist tag (TPE2) always wins over the track credit. "Kali Uchis
   Feat. Tyler, the Creator" and "Kali Uchis" share one album; the album shows "Kali Uchis", not six variants. Disc numbers (TPOS) are
   read too, so a two-disc set is sorted and headed Disc 1 / Disc 2, and a "Various Artists" album is not linked to one artist.
+- **Your own Jellyfin server, when you want it.** Sign in once (the token is encrypted with Android's Keystore), browse the server's
+  albums and songs, and play the original files through the same ExoPlayer session. The token travels in an `Authorization` header,
+  never in a stream URL. Download an album or a song with real progress and retry, then play it with the server off. Baliset does not
+  transcode: it asks for the original file, so a format the phone cannot decode will not play. Reach it from **Settings → Server →
+  Jellyfin**, the server icon on Home, or a `baliset://jellyfin` link.
 - **A library check that tells the truth.** One read-only audit for files that vanished, formats Android cannot decode (WMA, APE, MPC, DSD, FairPlay `.m4p`, compressed AIFF), duplicate groups, albums without a cover, tracks that only have a file name, and zero-length files. It can hand the coverless albums to MusicBrainz, or re-read the local covers, but it never deletes or edits anything.
 - **One loudness.** Volume leveling reads ReplayGain when a file has it, measures 16-bit AIFF PCM directly, and decodes MP3s (and other
   compressed files) once with the platform codec. A target RMS of −18 dBFS and a peak ceiling keep quiet rips up and loud masters
@@ -116,6 +126,7 @@ download to Android's installer, which always asks first.
 | Rescan or change source | **Settings → Rescan now**, or the Folder row to choose another folder |
 | Fix a missing cover | Album ••• → **Find cover art**, or **Settings → Album art → Fill missing covers** |
 | An AIFF / Apple Music library | **Choose a folder** with the library; Android's media index does not list AIFF |
+| Jellyfin | **Settings → Server → Jellyfin**, enter the address and sign in; browse, stream and download |
 
 ## Glass
 
@@ -148,14 +159,18 @@ without it: `BALISET_RELEASE_STORE_FILE`, `BALISET_RELEASE_STORE_PASSWORD`, `BAL
 ## Status and limits
 
 - **Baliset is a working name** for the app; the package id is `com.everettpenne.baliset`.
-- Version 0.4.1. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
+- Version 0.5.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
   dark themes; **it has not been run on a physical phone or a GrapheneOS device.**
 - Artwork was tested through the update: a cover cached under an old album key was adopted and shown, and a deliberately deleted cover
   was re-read from the MP3's own tags. The library check reported the two albums that genuinely have no cover and nothing else.
 - Album identity was exercised with six guest-credited *Isolation* tracks (one album, "Kali Uchis"), a two-disc album (Disc 1 / Disc 2
   headers and numbers), and the normal single-artist albums. Volume measurement covered 2 AIFFs and 7 MP3s in one pass, and a 5-second
   crossfade from a 3:33 AIFF into the MP3 moved the session and the UI to the next track, then paused, resumed and skipped normally.
-- The code has 59 JVM tests, including the AIFF/ID3 readers, album grouping, loudness math and the gain processor.
+- Jellyfin was exercised against a local mock server: sign-in, the music library, album art, direct streaming through ExoPlayer,
+  three downloaded tracks with progress, and playback with the mock server stopped. A real Jellyfin install was not available here.
+- The code has 79 JVM tests, including the AIFF/ID3 readers, album grouping, loudness math and the gain processor.
+- Jellyfin streaming is direct-play only (no transcode fallback); downloads run while Baliset's process is alive and resume from the
+  Downloads list, not in the background after the process is killed. Only the first music library on a server is shown.
 - The crossfade engine and its manual audio focus were tested on the emulator; phone-call and headphone focus changes were not.
   An album split across separate folders (one folder per disc) still appears as separate albums; a single folder with disc tags works.
 - The cover lookup was exercised live against MusicBrainz and the Cover Art Archive (Kind of Blue, 94% match), as was the

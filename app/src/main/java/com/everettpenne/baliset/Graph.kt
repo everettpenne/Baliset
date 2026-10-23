@@ -6,6 +6,7 @@ import com.everettpenne.baliset.data.LibraryCheck
 import com.everettpenne.baliset.data.Levels
 import com.everettpenne.baliset.data.Playlists
 import com.everettpenne.baliset.data.Settings
+import com.everettpenne.baliset.data.jellyfin.Jellyfin
 import com.everettpenne.baliset.data.musicbrainz.CoverService
 
 /**
@@ -19,6 +20,7 @@ class Graph(context: Context) {
     val covers = CoverService(context)
     val levels = Levels(context)
     val check = LibraryCheck(context)
+    val jellyfin = Jellyfin(context)
 }
 
 val Context.graph: Graph

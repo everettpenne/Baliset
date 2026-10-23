@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navDeepLink
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
@@ -43,6 +44,7 @@ import com.everettpenne.baliset.ui.screens.PlaylistScreen
 import com.everettpenne.baliset.ui.screens.PlaylistsScreen
 import com.everettpenne.baliset.ui.screens.QueueScreen
 import com.everettpenne.baliset.ui.screens.SearchScreen
+import com.everettpenne.baliset.ui.screens.JellyfinScreen
 import com.everettpenne.baliset.ui.screens.SettingsScreen
 import com.everettpenne.baliset.ui.screens.WelcomeScreen
 import com.everettpenne.baliset.ui.theme.Baliset
@@ -91,7 +93,7 @@ fun BalisetRoot(openUri: Uri? = null, debugFolder: String? = null) {
         }
 
         LaunchedEffect(Unit) {
-            Playback.start(context, graph.library, graph.settings, graph.levels)
+            Playback.start(context, graph.library, graph.settings, graph.levels, graph.jellyfin)
             if (!BuildConfig.DEBUG) updater.checkOnLaunch()
         }
 
@@ -174,6 +176,10 @@ fun BalisetRoot(openUri: Uri? = null, debugFolder: String? = null) {
                         composable(Route.PLAYLISTS) { PlaylistsScreen() }
                         composable(Route.SEARCH) { SearchScreen() }
                         composable(Route.SETTINGS) { SettingsScreen() }
+                        composable(
+                            Route.JELLYFIN,
+                            deepLinks = listOf(navDeepLink { uriPattern = "baliset://jellyfin" }),
+                        ) { JellyfinScreen() }
                         composable(Route.NOW) { NowPlayingScreen() }
                         composable(Route.QUEUE) { QueueScreen() }
                         composable(Route.FAVORITES) { PlaylistScreen(Route.FAVORITES) }

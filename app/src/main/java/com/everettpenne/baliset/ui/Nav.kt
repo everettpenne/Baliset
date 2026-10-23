@@ -11,6 +11,7 @@ object Route {
     const val PLAYLISTS = "playlists"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+    const val JELLYFIN = "jellyfin"
     const val WELCOME = "welcome"
     const val NOW = "now"
     const val QUEUE = "queue"
@@ -30,6 +31,7 @@ class Nav(private val controller: NavController) {
     fun playlists() = tab(Route.PLAYLISTS)
     fun search() = controller.navigate(Route.SEARCH) { launchSingleTop = true }
     fun settings() = controller.navigate(Route.SETTINGS) { launchSingleTop = true }
+    fun jellyfin() = controller.navigate(Route.JELLYFIN) { launchSingleTop = true }
     fun welcome() = controller.navigate(Route.WELCOME) { launchSingleTop = true }
     fun now() = controller.navigate(Route.NOW) { launchSingleTop = true }
     fun queue() = controller.navigate(Route.QUEUE) { launchSingleTop = true }

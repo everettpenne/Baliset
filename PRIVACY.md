@@ -11,6 +11,8 @@ Baliset is a local music player. It has no account, no server, no advertising an
   itself — on the phone, without a network request.
 - **Playback:** the file you choose, opened by the player. For AIFF, Baliset's own extractor parses the PCM chunks. Nothing else is read
   from it.
+- **Jellyfin:** only after you enter an address and sign in, Baliset asks that server for its music libraries, albums, songs, images,
+  streams and downloads. It reads the tags/fields the server returns, not anything else on the server.
 - **Library check:** only when you open it, Baliset checks that the saved files still exist, reads AIFF headers to spot unsupported
   compression, compares titles/artists/lengths for duplicates, and checks whether each album has a cached cover. It reports and changes
   nothing; no network request is made unless you separately ask for missing covers.
@@ -29,6 +31,8 @@ files and the folder you choose.
 | Cover art (one small JPEG per album) | `files/art/` | so lists scroll without reading files |
 | Which MusicBrainz release a cover came from | `files/cover-meta.json` | to show "Cover from MusicBrainz" and offer Reset |
 | A loudness correction for each measured track | `files/levels.json` | so volume leveling survives restarts |
+| Jellyfin server address, username, token and device id | encrypted shared preferences (`baliset_jellyfin_secure`) | so you stay signed in; encrypted with an Android Keystore key |
+| Downloaded Jellyfin songs and their posters | the app's own files under `jellyfin/` | to play them with the server off |
 | Playlists and favourites | `files/collections.json` | your lists |
 | Source, folder, recent plays, last position, sleep length | shared preferences | remembered choices |
 
@@ -50,8 +54,16 @@ the image from `archive.org`). It sends no account, no device identifier and no 
 least a second apart, answers are kept only as the chosen release's title, artist, year and IDs in `cover-meta.json`, and no query
 history is stored. Turning the switch off stops all of it.
 
-Revoking the Network permission leaves everything except the updater and the cover lookup working; folder covers, embedded covers
-and playback are entirely local.
+**Jellyfin.** This is opt-in and only to the server you enter. Baliset first fetches the server's public info at the address you type,
+then posts your **username and password once** to `Users/AuthenticateByName` over that address; after that it uses the returned token.
+The token is kept encrypted with a key in Android's Keystore, is sent only in the `Authorization` header to that server's host, and
+never appears in a stream or image URL. The server address, username and a random device id are kept with the session. Album art,
+streams and downloads come from the same server, and downloads are written to the app's own storage. Signing out removes the token
+(and keeps downloads, which you can delete yourself). **A server at home is usually plain http**: the sign-in screen warns that
+the password and what you play can be seen on the network between the phone and the server; use https or a trusted network.
+
+Revoking the Network permission leaves everything except the updater, the cover lookup and Jellyfin working; folder covers, embedded
+covers and playback are entirely local.
 
 ## Permissions
 
@@ -60,7 +72,7 @@ and playback are entirely local.
 - `POST_NOTIFICATIONS` — for the playback notification (Android 13+). Asked once, when playback first starts. Playback works without
   it; the notification is how another app or the lock screen controls the session.
 - `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `WAKE_LOCK` — keep music playing with the screen off.
-- `INTERNET` — the updater and, if you turn it on, the MusicBrainz cover lookup, as above.
+- `INTERNET` — the updater, the cover lookup if you turn it on, and the Jellyfin server you sign in to, as above.
 - `REQUEST_INSTALL_PACKAGES` (from the Glass updater library) — to hand a downloaded update to Android's installer, which asks you to
   confirm.
 

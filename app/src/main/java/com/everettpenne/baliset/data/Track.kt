@@ -3,6 +3,9 @@ package com.everettpenne.baliset.data
 import kotlinx.serialization.Serializable
 import com.everettpenne.baliset.util.primaryArtist
 
+const val SOURCE_LOCAL = "local"
+const val SOURCE_JELLYFIN = "jellyfin"
+
 /**
  * One piece of music, however it was found: a row in Android's media index or a document in a folder the person granted.
  *
@@ -32,12 +35,22 @@ data class Track(
     val fileName: String = "",
     /** A cover image sitting beside the file (cover.jpg and friends), when the folder scan found one. */
     val coverUri: String? = null,
+    /** "local" for the phone's own library, "jellyfin" for a track on a connected server. */
+    val source: String = SOURCE_LOCAL,
+    /** The Jellyfin item id, and the album/artwork ids that go with it; null for local tracks. */
+    val remoteId: String? = null,
+    val remoteAlbumId: String? = null,
+    val artUrl: String? = null,
 ) {
     val albumKey: String
-        get() = when {
-            albumId > 0L -> "m$albumId"
-            folder.isNotBlank() -> "d:$folder|${album.trim().lowercase()}"
-            else -> "d:${album.trim().lowercase()}|${albumArtist?.takeIf { it.isNotBlank() } ?: primaryArtist(artist)}"
+        get() = if (source == SOURCE_JELLYFIN) {
+            "jf:${remoteAlbumId ?: remoteId}"
+        } else {
+            when {
+                albumId > 0L -> "m$albumId"
+                folder.isNotBlank() -> "d:$folder|${album.trim().lowercase()}"
+                else -> "d:${album.trim().lowercase()}|${albumArtist?.takeIf { it.isNotBlank() } ?: primaryArtist(artist)}"
+            }
         }
 }
 
@@ -46,6 +59,7 @@ data class Track(
  * album/artist key; later ones cover the album artist, the main artist and the new folder key. Used only to migrate existing art.
  */
 fun legacyArtKeys(track: Track): List<String> = buildList {
+    if (track.source == SOURCE_JELLYFIN) return emptyList()
     if (track.albumId > 0L) add("m${track.albumId}")
     val album = track.album
     val lower = album.trim().lowercase()

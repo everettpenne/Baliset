@@ -1,6 +1,7 @@
 package com.everettpenne.baliset.playback
 
 import android.content.ComponentName
+import android.net.Uri
 import android.os.Bundle
 import android.content.Context
 import androidx.media3.common.C
@@ -11,6 +12,8 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.everettpenne.baliset.data.Artwork
 import com.everettpenne.baliset.data.LEVEL_GAIN_EXTRA
+import com.everettpenne.baliset.data.SOURCE_JELLYFIN
+import com.everettpenne.baliset.data.jellyfin.Jellyfin
 import com.everettpenne.baliset.data.Library
 import com.everettpenne.baliset.data.Levels
 import com.everettpenne.baliset.data.Settings
@@ -64,6 +67,7 @@ object Playback {
     private var library: Library? = null
     private var settings: Settings? = null
     private var levels: Levels? = null
+    private var jellyfin: Jellyfin? = null
 
     private var baseQueue: List<Track> = emptyList()
     private var queue: List<Track> = emptyList()
@@ -78,11 +82,12 @@ object Playback {
     val state: StateFlow<NowPlaying> = _state.asStateFlow()
 
     /** Connects once. Safe to call from every composition: later calls are ignored. */
-    fun start(context: Context, library: Library, settings: Settings, levels: Levels) {
+    fun start(context: Context, library: Library, settings: Settings, levels: Levels, jellyfin: Jellyfin) {
         appContext = context.applicationContext
         this.library = library
         this.settings = settings
         this.levels = levels
+        this.jellyfin = jellyfin
         if (controller != null || connecting != null) return
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
@@ -195,7 +200,12 @@ object Playback {
     private suspend fun itemsFor(tracks: List<Track>): List<MediaItem> {
         val context = appContext ?: return emptyList()
         val artwork = HashMap<String, ByteArray?>()
-        return tracks.map { track ->
+        return tracks.mapNotNull { track ->
+            val remote = track.source == SOURCE_JELLYFIN
+            if (remote) jellyfin?.ensureArt(track.albumKey, track.artUrl)
+            val local = if (remote) track.remoteId?.let { jellyfin?.downloads?.fileFor(it) } else null
+            val uri = local?.let { Uri.fromFile(it).toString() } ?: track.uri
+            if (uri.isBlank()) return@mapNotNull null
             val bytes = artwork.getOrPut(track.albumKey) { Artwork.bytes(context, track.albumKey) }
             // The gain is always carried, so the service can honour the leveling switch as it is now, not as it was when the
             // queue was built. Tracks without a measurement simply carry 1.0.
@@ -211,7 +221,7 @@ object Playback {
                 .build()
             MediaItem.Builder()
                 .setMediaId(track.id)
-                .setUri(track.uri)
+                .setUri(uri)
                 .setMediaMetadata(metadata)
                 .build()
         }

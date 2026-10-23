@@ -11,7 +11,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FactCheck
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -84,6 +86,7 @@ fun SettingsScreen() {
     var crossfadeMenu by remember { mutableStateOf(false) }
     var checkOpen by remember { mutableStateOf(false) }
     val checkState by graph.check.state.collectAsState()
+    val jellyfinSession by graph.jellyfin.sessions.session.collectAsState()
     var consentAsk by remember { mutableStateOf(false) }
     var coverData by remember { mutableStateOf(false) }
     val albums = remember(snapshot.tracks) { com.everettpenne.baliset.data.albumsOf(snapshot.tracks) }
@@ -184,6 +187,27 @@ fun SettingsScreen() {
                     )
                     Text(
                         "AIFF files are not in Android's media index; choose the folder for those libraries. Baliset reads their tags and cover art directly.",
+                        style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+
+            item("server") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Server", style = IosType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                    GlassGroup {
+                        GlassListRow(
+                            "Jellyfin",
+                            subtitle = jellyfinSession?.let { session ->
+                                listOfNotNull(session.serverName.ifBlank { "Connected" }, session.userName.ifBlank { null }).joinToString(" · ")
+                            } ?: "Stream and download from your server",
+                            onClick = { nav?.jellyfin() },
+                            leading = { Icon(Icons.Rounded.Dns, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            trailing = { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) },
+                        )
+                    }
+                    Text(
+                        "Jellyfin is optional. Your server address, username and token stay on this phone; the token is encrypted with Android's Keystore. Downloads live in Baliset's own storage.",
                         style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp),
                     )
                 }

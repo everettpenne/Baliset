@@ -17,8 +17,8 @@ android {
         applicationId = "com.everettpenne.baliset"
         minSdk = 31
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -66,6 +66,9 @@ dependencies {
     // Playback: ExoPlayer owns the sound, MediaSession gives it a notification, lock-screen controls and the launcher's island card.
     implementation("androidx.media3:media3-exoplayer:1.7.1")
     implementation("androidx.media3:media3-session:1.7.1")
+    // Jellyfin: one HTTP client for the API, artwork and the ExoPlayer streams.
+    implementation("androidx.media3:media3-datasource-okhttp:1.7.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("androidx.core:core-ktx:1.16.0")
@@ -74,4 +77,5 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     // Android stubs org.json in unit tests; the real one parses the MusicBrainz fixtures.
     testImplementation("org.json:json:20240303")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

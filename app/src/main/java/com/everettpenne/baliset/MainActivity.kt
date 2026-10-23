@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         if (savedInstanceState == null) {
-            openUri = intent?.data
+            openUri = audioUri(intent)
             if (BuildConfig.DEBUG) debugFolder = intent?.getStringExtra("baliset.folder")
         }
         setContent { BalisetRoot(openUri, debugFolder) }
@@ -35,7 +35,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        openUri = intent.data
+        openUri = audioUri(intent)
         if (BuildConfig.DEBUG) debugFolder = intent.getStringExtra("baliset.folder")
+    }
+
+    /** Only a real audio file is "open with"; a baliset:// link is for the navigator, not the player. */
+    private fun audioUri(intent: Intent?): Uri? {
+        if (intent?.action != Intent.ACTION_VIEW) return null
+        val uri = intent.data ?: return null
+        return uri.takeIf { it.scheme == "content" || it.scheme == "file" }
     }
 }

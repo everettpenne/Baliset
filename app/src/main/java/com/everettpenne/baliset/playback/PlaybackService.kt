@@ -14,6 +14,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -29,6 +31,7 @@ import androidx.media3.extractor.Extractor
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.everettpenne.baliset.BalisetApp
 import com.everettpenne.baliset.MainActivity
 import com.everettpenne.baliset.data.LEVEL_GAIN_EXTRA
 
@@ -59,6 +62,8 @@ class PlaybackService : MediaSessionService() {
     private var fadingFrom: ExoPlayer? = null
     private var fadeStart = 0L
     private var fadeDuration = 0L
+
+    private val jellyfin get() = (application as BalisetApp).graph.jellyfin
 
     private val musicAttributes = AudioAttributes.Builder()
         .setUsage(C.USAGE_MEDIA)
@@ -148,8 +153,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun buildPlayer(gain: GainProcessor): ExoPlayer {
+        val dataSource = DefaultDataSource.Factory(this, OkHttpDataSource.Factory(jellyfin.http))
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(this, extractors))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, extractors))
             .setRenderersFactory(LevelRenderersFactory(this, gain))
             .setAudioAttributes(musicAttributes, /* handleAudioFocus = */ false)
             .setHandleAudioBecomingNoisy(true)

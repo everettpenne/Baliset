@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -76,7 +77,10 @@ fun HomeScreen() {
         GlassTopBar(
             "Baliset",
             subtitle = if (snapshot.tracks.isEmpty()) "Your music, privately" else "$greetingText · ${countWord(songs.size, "song")} · ${countWord(albums.size, "album")}",
-            actions = { GlassIconButton(Icons.Rounded.Settings, "Settings", { nav?.settings() }) },
+            actions = {
+                GlassIconButton(Icons.Rounded.Dns, "Jellyfin", { nav?.jellyfin() })
+                GlassIconButton(Icons.Rounded.Settings, "Settings", { nav?.settings() })
+            },
         )
     }) { padding ->
         if (snapshot.tracks.isEmpty()) {
