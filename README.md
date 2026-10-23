@@ -139,8 +139,9 @@ without it: `BALISET_RELEASE_STORE_FILE`, `BALISET_RELEASE_STORE_PASSWORD`, `BAL
   folder-cover order. MusicBrainz coverage is uneven for very new, very local and some classical releases; the candidate sheet is
   there for those.
 - AIFF was exercised with real files from a library of 790 AIFFs and 47 MP3s: 16-bit big-endian `.aif` and little-endian `sowt`
-  `.aiff`, including their ID3 tags, embedded covers, lengths, playback, seeking and next/previous. 24-bit and float AIFF, and the
-  compressed AIFF variants, are not supported; Android's media index cannot see AIFF at all, so the folder source is required.
+  `.aiff`, including their ID3 tags, embedded covers, lengths, playback, seeking and next/previous. 24-bit and floating-point AIFF
+  use the same extractor but were not exercised; compressed AIFF variants (`ima4`, `alaw`, `ulaw`) are rejected. Android's media index
+  cannot see AIFF at all, so the folder source is required.
 - WMA, APE, MPC, DSD, and FairPlay `.m4p` are still out of scope; the library had none of them.
 - The phone-index route is implemented, but the test emulator's media index exposed the pushed files without tags or `is_music`, so the
   screenshots use the folder route (the same scanner, reading each file's tags). On a phone whose index is populated, **Scan my phone**
