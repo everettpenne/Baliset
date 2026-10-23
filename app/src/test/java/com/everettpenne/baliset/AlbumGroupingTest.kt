@@ -3,6 +3,7 @@ package com.everettpenne.baliset
 import com.everettpenne.baliset.data.Track
 import com.everettpenne.baliset.data.albumsOf
 import com.everettpenne.baliset.data.artistsOf
+import com.everettpenne.baliset.data.legacyArtKeys
 import com.everettpenne.baliset.util.primaryArtist
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -89,6 +90,13 @@ class AlbumGroupingTest {
         assertEquals("Kali Uchis", primaryArtist("Kali Uchis Feat BIA"))
         assertEquals("Kali Uchis", primaryArtist("Kali Uchis ft. Steve Lacy"))
         assertEquals("Earth, Wind & Fire", primaryArtist("Earth, Wind & Fire"))
+    }
+
+    @Test fun legacyArtKeysCoverTheOldAndNewAlbumIdentity() {
+        val keys = legacyArtKeys(track("1", "Kali Uchis Feat BIA", folder = "folder:isolation"))
+        assertTrue("d:Isolation|Kali Uchis Feat BIA" in keys)
+        assertTrue("d:Isolation|Kali Uchis" in keys)
+        assertTrue("d:folder:isolation|isolation" in keys)
     }
 
     @Test fun artistPagesGatherGuests() {

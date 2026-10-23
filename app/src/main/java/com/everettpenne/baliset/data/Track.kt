@@ -41,6 +41,25 @@ data class Track(
         }
 }
 
+/**
+ * The album keys this track's cover may have been cached under before album grouping changed. The first is the old exact
+ * album/artist key; later ones cover the album artist, the main artist and the new folder key. Used only to migrate existing art.
+ */
+fun legacyArtKeys(track: Track): List<String> = buildList {
+    if (track.albumId > 0L) add("m${track.albumId}")
+    val album = track.album
+    val lower = album.trim().lowercase()
+    val artists = linkedSetOf<String>()
+    if (track.artist.isNotBlank()) artists += track.artist
+    track.albumArtist?.takeIf { it.isNotBlank() }?.let { artists += it }
+    primaryArtist(track.artist).takeIf { it.isNotBlank() }?.let { artists += it }
+    for (artist in artists) {
+        add("d:$album|$artist")
+        add("d:$lower|$artist")
+    }
+    if (track.folder.isNotBlank()) add("d:${track.folder}|$lower")
+}
+
 /** An album, gathered from its tracks, with the track whose file the artwork is read from. */
 data class Album(
     val key: String,

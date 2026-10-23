@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FactCheck
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Image
@@ -81,6 +82,8 @@ fun SettingsScreen() {
     val levelJob by graph.levels.state.collectAsState()
     val crossfade by graph.settings.crossfadeMs.collectAsState()
     var crossfadeMenu by remember { mutableStateOf(false) }
+    var checkOpen by remember { mutableStateOf(false) }
+    val checkState by graph.check.state.collectAsState()
     var consentAsk by remember { mutableStateOf(false) }
     var coverData by remember { mutableStateOf(false) }
     val albums = remember(snapshot.tracks) { com.everettpenne.baliset.data.albumsOf(snapshot.tracks) }
@@ -156,6 +159,14 @@ fun SettingsScreen() {
                                 else nav?.welcome()
                             },
                             leading = { Icon(Icons.Rounded.Refresh, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                        )
+                        GlassRowDivider()
+                        GlassListRow(
+                            "Library check",
+                            subtitle = "Files, duplicates, formats and covers",
+                            onClick = { checkOpen = true },
+                            leading = { Icon(Icons.Rounded.FactCheck, null, tint = Baliset.accent, modifier = Modifier.size(22.dp)) },
+                            trailing = { if (checkState.running) Text("Checking", style = IosType.footnote, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         )
                         GlassRowDivider()
                         GlassListRow(
@@ -309,6 +320,8 @@ fun SettingsScreen() {
         "Baliset will send album and artist names to musicbrainz.org and download artwork from the Cover Art Archive. Nothing about you is sent, and only the albums you ask about are looked up. You can turn this off at any time.",
         "Turn on", { graph.settings.setMbConsent(true); consentAsk = false }, { consentAsk = false }, dismissLabel = "Not now",
     )
+
+    if (checkOpen) LibraryCheckSheet(onDismiss = { checkOpen = false })
 
     if (coverData) GlassSheet(onDismiss = { coverData = false }) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

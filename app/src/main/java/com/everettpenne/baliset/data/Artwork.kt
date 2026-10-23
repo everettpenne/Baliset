@@ -47,7 +47,7 @@ object Artwork {
         return File(dir(context), "$name.jpg")
     }
 
-    fun has(context: Context, albumKey: String): Boolean = file(context, albumKey).isFile
+    fun has(context: Context, albumKey: String): Boolean = file(context, albumKey).let { it.isFile && it.length() > 0L }
 
     /** The decoded cover, from memory or the cache file; null while it has not been extracted. */
     suspend fun load(context: Context, albumKey: String): Bitmap? = withContext(Dispatchers.IO) {
@@ -72,6 +72,31 @@ object Artwork {
             else runCatching { thumbnail(context, uri) }.getOrNull() ?: embedded(context, uri)
         if (picture == null) return@withContext false
         write(context, albumKey, picture)
+    }
+
+    /**
+     * Adopts a cover that was cached under an older album key, so grouping changes (album artist, folder identity) do not orphan the
+     * art that was already on the phone. The old file is left in place; a copy is written under the new key.
+     */
+    suspend fun adopt(context: Context, albumKey: String, legacyKeys: List<String>): Boolean = withContext(Dispatchers.IO) {
+        if (has(context, albumKey)) return@withContext true
+        for (legacy in legacyKeys.distinct()) {
+            if (legacy == albumKey) continue
+            val source = file(context, legacy)
+            if (!source.isFile || source.length() == 0L) continue
+            val target = file(context, albumKey)
+            val copied = runCatching {
+                val temporary = File(target.parentFile, target.name + ".tmp")
+                source.copyTo(temporary, overwrite = true)
+                temporary.renameTo(target) || run { target.delete(); temporary.renameTo(target) }
+            }.getOrDefault(false)
+            if (copied) {
+                memory.remove(albumKey)
+                revision++
+                return@withContext true
+            }
+        }
+        false
     }
 
     /** Writes cover bytes fetched from elsewhere (the Cover Art Archive) through the same scaling and cache. */

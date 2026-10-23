@@ -11,6 +11,9 @@ Baliset is a local music player. It has no account, no server, no advertising an
   itself — on the phone, without a network request.
 - **Playback:** the file you choose, opened by the player. For AIFF, Baliset's own extractor parses the PCM chunks. Nothing else is read
   from it.
+- **Library check:** only when you open it, Baliset checks that the saved files still exist, reads AIFF headers to spot unsupported
+  compression, compares titles/artists/lengths for duplicates, and checks whether each album has a cached cover. It reports and changes
+  nothing; no network request is made unless you separately ask for missing covers.
 - **Volume leveling:** only when you tap **Measure volume**, Baliset reads each track once — AIFF PCM directly, compressed files through
   Android's decoder — to find its RMS and peak. The result is a gain in `levels.json`; the audio never leaves the phone and no analysis
   runs in the background.

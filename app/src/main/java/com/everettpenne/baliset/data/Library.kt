@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import com.everettpenne.baliset.util.guessName
 import com.everettpenne.baliset.util.isAiffFileName
@@ -36,13 +38,20 @@ class Library(private val context: Context) {
     val scan: StateFlow<ScanState> = _scan.asStateFlow()
 
     private var byId: Map<String, Track> = emptyMap()
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private val artMutex = Mutex()
 
     init { load() }
 
     private fun load() {
         if (!snapshotFile.isFile) return
         runCatching { json.decodeFromString<LibrarySnapshot>(snapshotFile.readText()) }
-            .onSuccess { setSnapshot(it) }
+            .onSuccess { snapshot ->
+                setSnapshot(snapshot)
+                // A cover can be missing after an update changed the album key, or because a scan's extraction failed for the first
+                // track. Repair it in the background: adopt an older cached cover, then read the files again.
+                if (snapshot.tracks.isNotEmpty()) scope.launch { ensureArtwork(snapshot.tracks) }
+            }
     }
 
     private fun setSnapshot(snapshot: LibrarySnapshot) {
@@ -77,8 +86,6 @@ class Library(private val context: Context) {
         if (treeUri.startsWith("/")) queryDirectory(File(treeUri)) else queryTree(treeUri)
     }
 
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
-
     private fun scan(source: String, finder: suspend (progress: (Int) -> Unit) -> List<Track>) {
         if (_scan.value.running) return
         _scan.value = ScanState(running = true, phase = if (source == LibrarySnapshot.SOURCE_MEDIA) "Reading your music" else "Looking through the folder")
@@ -86,14 +93,7 @@ class Library(private val context: Context) {
             try {
                 val found = finder { count -> _scan.update { it.copy(found = count) } }
                 _scan.update { it.copy(phase = "Preparing artwork", found = found.size, done = 0, total = 0) }
-                val albums = found.groupBy { it.albumKey }
-                var done = 0
-                for ((key, list) in albums) {
-                    val artTrack = list.minByOrNull { it.trackNo } ?: list.first()
-                    runCatching { Artwork.extract(context, key, artTrack.uri, artTrack.coverUri) }
-                    done++
-                    _scan.update { it.copy(done = done, total = albums.size) }
-                }
+                ensureArtwork(found) { done, total -> _scan.update { it.copy(done = done, total = total) } }
                 val snapshot = LibrarySnapshot(source = source, scannedAt = System.currentTimeMillis(), tracks = found)
                 setSnapshot(snapshot)
                 persist(snapshot)
@@ -106,12 +106,40 @@ class Library(private val context: Context) {
         }
     }
 
+    /** Makes sure every album has a cover: adopt one cached under an old key, then read the folder/embedded/AIFF art. */
+    private suspend fun ensureArtwork(tracks: List<Track>, onProgress: ((Int, Int) -> Unit)? = null) {
+        val albums = albumsOf(tracks)
+        artMutex.withLock {
+            albums.forEachIndexed { index, album ->
+                ensureArt(album)
+                onProgress?.invoke(index + 1, albums.size)
+            }
+        }
+    }
+
+    private suspend fun ensureArt(album: Album) {
+        if (Artwork.has(context, album.key)) return
+        val legacy = album.tracks.flatMap { legacyArtKeys(it) }.distinct()
+        if (Artwork.adopt(context, album.key, legacy)) return
+        // A merged album's first track may have no art while a later one does, so try every track before giving up.
+        for (track in album.tracks) {
+            if (Artwork.extract(context, album.key, track.uri, track.coverUri)) return
+        }
+    }
+
     private suspend fun persist(snapshot: LibrarySnapshot) = withContext(Dispatchers.IO) {
         runCatching {
             val temporary = File(snapshotFile.parentFile, snapshotFile.name + ".tmp")
             temporary.writeText(json.encodeToString(snapshot))
             if (!temporary.renameTo(snapshotFile)) { snapshotFile.delete(); temporary.renameTo(snapshotFile) }
         }
+    }
+
+    /** Re-reads any cover that is missing, adopting older cached art first. */
+    fun repairArtwork() {
+        val current = tracks
+        if (current.isEmpty()) return
+        scope.launch { ensureArtwork(current) }
     }
 
     /** Forgets the saved library and its artwork; the files themselves are untouched. */

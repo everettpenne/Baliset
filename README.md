@@ -30,6 +30,7 @@ and Baliset plays the songs that are simply *there*.
 <p align="center">
   <img src="docs/images/discs.webp" width="180" alt="A two-disc album, with Disc 1 and Disc 2 headers">
   <img src="docs/images/playback.webp" width="180" alt="Volume leveling, crossfade and a measured library in Settings">
+  <img src="docs/images/library-check.webp" width="180" alt="The library check, listing albums that still need a cover">
 </p>
 
 ## What it does
@@ -45,6 +46,7 @@ and Baliset plays the songs that are simply *there*.
 - **Albums, with their guests.** A folder is one album, and an album-artist tag (TPE2) always wins over the track credit. "Kali Uchis
   Feat. Tyler, the Creator" and "Kali Uchis" share one album; the album shows "Kali Uchis", not six variants. Disc numbers (TPOS) are
   read too, so a two-disc set is sorted and headed Disc 1 / Disc 2, and a "Various Artists" album is not linked to one artist.
+- **A library check that tells the truth.** One read-only audit for files that vanished, formats Android cannot decode (WMA, APE, MPC, DSD, FairPlay `.m4p`, compressed AIFF), duplicate groups, albums without a cover, tracks that only have a file name, and zero-length files. It can hand the coverless albums to MusicBrainz, or re-read the local covers, but it never deletes or edits anything.
 - **One loudness.** Volume leveling reads ReplayGain when a file has it, measures 16-bit AIFF PCM directly, and decodes MP3s (and other
   compressed files) once with the platform codec. A target RMS of −18 dBFS and a peak ceiling keep quiet rips up and loud masters
   down without clipping. Measuring is an explicit action with progress and Stop; the correction is stored only on the phone.
@@ -146,12 +148,14 @@ without it: `BALISET_RELEASE_STORE_FILE`, `BALISET_RELEASE_STORE_PASSWORD`, `BAL
 ## Status and limits
 
 - **Baliset is a working name** for the app; the package id is `com.everettpenne.baliset`.
-- Version 0.4.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
+- Version 0.4.1. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
   dark themes; **it has not been run on a physical phone or a GrapheneOS device.**
+- Artwork was tested through the update: a cover cached under an old album key was adopted and shown, and a deliberately deleted cover
+  was re-read from the MP3's own tags. The library check reported the two albums that genuinely have no cover and nothing else.
 - Album identity was exercised with six guest-credited *Isolation* tracks (one album, "Kali Uchis"), a two-disc album (Disc 1 / Disc 2
   headers and numbers), and the normal single-artist albums. Volume measurement covered 2 AIFFs and 7 MP3s in one pass, and a 5-second
   crossfade from a 3:33 AIFF into the MP3 moved the session and the UI to the next track, then paused, resumed and skipped normally.
-- The code has 58 JVM tests, including the AIFF/ID3 readers, album grouping, loudness math and the gain processor.
+- The code has 59 JVM tests, including the AIFF/ID3 readers, album grouping, loudness math and the gain processor.
 - The crossfade engine and its manual audio focus were tested on the emulator; phone-call and headphone focus changes were not.
   An album split across separate folders (one folder per disc) still appears as separate albums; a single folder with disc tags works.
 - The cover lookup was exercised live against MusicBrainz and the Cover Art Archive (Kind of Blue, 94% match), as was the
