@@ -1,0 +1,296 @@
+package com.everettpenne.baliset.data
+
+import android.content.ContentUris
+import android.content.Context
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.provider.DocumentsContract
+import android.provider.MediaStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import com.everettpenne.baliset.util.guessName
+import java.io.File
+
+/**
+ * The music on this phone, found either in Android's media index (one narrow permission, tags read for free) or in a folder the person
+ * granted through the system picker (no permission at all). The result is saved as JSON, so opening the app again is instant; a rescan
+ * replaces it.
+ *
+ * Scanning never touches the network and never writes outside the app's own storage. Artwork is extracted once per album during the
+ * scan, which is the slow but polite part: the lists then scroll without reading files.
+ */
+class Library(private val context: Context) {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val snapshotFile = File(context.filesDir, "library.json")
+    private val _snapshot = MutableStateFlow(LibrarySnapshot())
+    val snapshot: StateFlow<LibrarySnapshot> = _snapshot.asStateFlow()
+    private val _scan = MutableStateFlow(ScanState())
+    val scan: StateFlow<ScanState> = _scan.asStateFlow()
+
+    private var byId: Map<String, Track> = emptyMap()
+
+    init { load() }
+
+    private fun load() {
+        if (!snapshotFile.isFile) return
+        runCatching { json.decodeFromString<LibrarySnapshot>(snapshotFile.readText()) }
+            .onSuccess { setSnapshot(it) }
+    }
+
+    private fun setSnapshot(snapshot: LibrarySnapshot) {
+        byId = snapshot.tracks.associateBy { it.id }
+        _snapshot.value = snapshot
+    }
+
+    fun find(id: String?): Track? = id?.let { byId[it] }
+
+    /** A one-off track for an audio file opened from another app (Sietch, a download): tags read now, artwork cached for the player. */
+    suspend fun describe(uri: Uri): Track? = withContext(Dispatchers.IO) {
+        val resolver = context.contentResolver
+        // Only an audio file: a folder handed over by mistake (a directory link, a document tree) is not playable.
+        val mime = runCatching { resolver.getType(uri) }.getOrNull()
+        if (mime != null && !mime.startsWith("audio/")) return@withContext null
+        val name = runCatching {
+            resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment ?: "Audio"
+        val track = readTags(uri, name, System.currentTimeMillis())
+        if (track.durationMs <= 0L && track.title.isBlank()) return@withContext null
+        runCatching { Artwork.extract(context, track.albumKey, track.uri) }
+        track
+    }
+    fun tracks(ids: Collection<String>): List<Track> = ids.mapNotNull { byId[it] }
+    val tracks: List<Track> get() = _snapshot.value.tracks
+
+    fun scanMedia() = scan(source = LibrarySnapshot.SOURCE_MEDIA) { queryMediaStore() }
+    fun scanFolder(treeUri: String) = scan(source = LibrarySnapshot.SOURCE_FOLDER) {
+        // A granted tree is a content:// address; a plain path (the app's own music folder, or a test) is walked directly.
+        if (treeUri.startsWith("/")) queryDirectory(File(treeUri)) else queryTree(treeUri)
+    }
+
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    private fun scan(source: String, finder: suspend (progress: (Int) -> Unit) -> List<Track>) {
+        if (_scan.value.running) return
+        _scan.value = ScanState(running = true, phase = if (source == LibrarySnapshot.SOURCE_MEDIA) "Reading your music" else "Looking through the folder")
+        scope.launch {
+            try {
+                val found = finder { count -> _scan.update { it.copy(found = count) } }
+                _scan.update { it.copy(phase = "Preparing artwork", found = found.size, done = 0, total = 0) }
+                val albums = found.groupBy { it.albumKey }
+                var done = 0
+                for ((key, list) in albums) {
+                    val artTrack = list.minByOrNull { it.trackNo } ?: list.first()
+                    runCatching { Artwork.extract(context, key, artTrack.uri) }
+                    done++
+                    _scan.update { it.copy(done = done, total = albums.size) }
+                }
+                val snapshot = LibrarySnapshot(source = source, scannedAt = System.currentTimeMillis(), tracks = found)
+                setSnapshot(snapshot)
+                persist(snapshot)
+                _scan.value = ScanState(found = found.size)
+            } catch (error: SecurityException) {
+                _scan.value = ScanState(error = if (source == LibrarySnapshot.SOURCE_FOLDER) "Baliset no longer has access to that folder. Choose it again in Settings." else "Baliset needs permission to read your music.")
+            } catch (error: Exception) {
+                _scan.value = ScanState(error = error.message ?: "The library could not be read.")
+            }
+        }
+    }
+
+    private suspend fun persist(snapshot: LibrarySnapshot) = withContext(Dispatchers.IO) {
+        runCatching {
+            val temporary = File(snapshotFile.parentFile, snapshotFile.name + ".tmp")
+            temporary.writeText(json.encodeToString(snapshot))
+            if (!temporary.renameTo(snapshotFile)) { snapshotFile.delete(); temporary.renameTo(snapshotFile) }
+        }
+    }
+
+    /** Forgets the saved library and its artwork; the files themselves are untouched. */
+    fun clear() {
+        setSnapshot(LibrarySnapshot())
+        Artwork.clear(context)
+        runCatching { snapshotFile.delete() }
+        _scan.value = ScanState()
+    }
+
+    // ---- Android's media index ---------------------------------------------------------------------------------------------
+
+    private fun queryMediaStore(): List<Track> {
+        // The audio view is the obvious place, but a phone whose media index has not finished with a file can hide it there. The files
+        // table with media_type = 2 is the same rows seen directly, and is the fallback when the first query comes back empty.
+        return queryAudio(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), null)
+    }
+
+    private fun queryAudio(collection: Uri, selection: String?): List<Track> {
+        val resolver = context.contentResolver
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.TRACK,
+            MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.DISPLAY_NAME,
+        )
+        // Every audio row Android has. Tags are taken from the index when it has them; a row the index has not finished reading
+        // (or a file it never tagged) is read from the file itself, so the library is never empty just because the index is thin.
+        val order = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
+        val out = ArrayList<Track>()
+        resolver.query(collection, projection, selection, null, order)?.use { cursor ->
+            val total = cursor.count
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                val fileName = cursor.getString(10).orEmpty()
+                val uri = ContentUris.withAppendedId(collection, id)
+                var title = cursor.getString(1)?.takeIf { it.isNotBlank() } ?: ""
+                var artist = cursor.getString(2)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: UNKNOWN_ARTIST
+                var album = cursor.getString(3)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: UNKNOWN_ALBUM
+                var duration = cursor.getLong(5)
+                var trackNo = cursor.getString(6)?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0
+                var year = cursor.getInt(7)
+                if (duration <= 0L || title.isBlank() || artist == UNKNOWN_ARTIST || album == UNKNOWN_ALBUM) {
+                    val tags = readFileTags(uri, fileName)
+                    if (title.isBlank()) title = tags.title
+                    if (artist == UNKNOWN_ARTIST) artist = tags.artist
+                    if (album == UNKNOWN_ALBUM) album = tags.album
+                    if (duration <= 0L) duration = tags.durationMs
+                    if (trackNo == 0) trackNo = tags.trackNo
+                    if (year == 0) year = tags.year
+                }
+                // A notification or ringtone is not music; a track Android has not measured yet is kept and measured on play.
+                if (duration in 1..9_999) continue
+                out += Track(
+                    id = "m:$id",
+                    uri = uri.toString(),
+                    title = title.ifBlank { guessName(fileName).title },
+                    artist = artist,
+                    album = album,
+                    albumId = cursor.getLong(4),
+                    durationMs = duration,
+                    trackNo = trackNo,
+                    year = year,
+                    addedAt = cursor.getLong(8) * 1000L,
+                    mime = cursor.getString(9),
+                    fileName = fileName,
+                )
+                if (out.size % 40 == 0) _scan.update { it.copy(found = out.size, done = out.size, total = total) }
+            }
+        }
+        return out
+    }
+
+    /** Title, artist, album, length and numbers read out of the file itself, for a row the media index did not fill in. */
+    private data class FileTags(val title: String, val artist: String, val album: String, val durationMs: Long, val trackNo: Int, val year: Int)
+
+    private fun readFileTags(uri: Uri, fileName: String): FileTags {
+        val guess = guessName(fileName)
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            FileTags(
+                title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() } ?: guess.title,
+                artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)?.takeIf { it.isNotBlank() } ?: guess.artist,
+                album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)?.takeIf { it.isNotBlank() } ?: UNKNOWN_ALBUM,
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                trackNo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0,
+                year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)?.take(4)?.toIntOrNull() ?: 0,
+            )
+        } catch (_: Exception) {
+            FileTags(guess.title, guess.artist, UNKNOWN_ALBUM, 0L, 0, 0)
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    // ---- A folder the person granted ---------------------------------------------------------------------------------------
+
+    private fun queryTree(treeUri: String): List<Track> {
+        val resolver = context.contentResolver
+        val tree = Uri.parse(treeUri)
+        val rootId = DocumentsContract.getTreeDocumentId(tree)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val folders = ArrayDeque<String>().apply { add(rootId) }
+        val out = ArrayList<Track>()
+        var visited = 0
+        while (folders.isNotEmpty() && visited < MAX_FOLDERS && out.size < MAX_TRACKS) {
+            val folderId = folders.removeFirst()
+            visited++
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, folderId)
+            runCatching {
+                resolver.query(children, projection, null, null, null)?.use { cursor ->
+                    while (cursor.moveToNext() && out.size < MAX_TRACKS) {
+                        val id = cursor.getString(0) ?: continue
+                        val name = cursor.getString(1) ?: id
+                        val mime = cursor.getString(2)
+                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            folders += id
+                        } else if (isAudio(name, mime)) {
+                            val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                            out += readTags(uri, name, cursor.getLong(3))
+                            _scan.update { it.copy(found = out.size, done = out.size, total = 0) }
+                        }
+                    }
+                }
+            }.onFailure { if (visited == 1) throw it }
+        }
+        return out
+    }
+
+    private fun queryDirectory(dir: File): List<Track> {
+        val out = ArrayList<Track>()
+        val folders = ArrayDeque<File>().apply { add(dir) }
+        while (folders.isNotEmpty() && out.size < MAX_TRACKS) {
+            val children = folders.removeFirst().listFiles() ?: continue
+            for (child in children) {
+                if (child.isDirectory) folders += child
+                else if (isAudio(child.name, null)) {
+                    out += readTags(Uri.fromFile(child), child.name, child.lastModified())
+                    _scan.update { it.copy(found = out.size) }
+                }
+            }
+        }
+        return out
+    }
+
+    private fun isAudio(name: String, mime: String?): Boolean =
+        mime?.startsWith("audio/") == true || name.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS
+
+    private fun readTags(uri: Uri, fileName: String, modified: Long): Track {
+        val tags = readFileTags(uri, fileName)
+        return Track(
+            id = "d:${uri}",
+            uri = uri.toString(),
+            title = tags.title,
+            artist = tags.artist,
+            album = tags.album,
+            durationMs = tags.durationMs,
+            trackNo = tags.trackNo,
+            year = tags.year,
+            addedAt = modified,
+            mime = context.contentResolver.getType(uri),
+            fileName = fileName,
+        )
+    }
+
+    private companion object {
+        const val MAX_FOLDERS = 4_000
+        const val MAX_TRACKS = 20_000
+        val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "wave", "wma", "aiff", "aif", "alac", "mpc", "ape")
+    }
+}
