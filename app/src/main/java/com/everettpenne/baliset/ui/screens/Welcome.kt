@@ -125,6 +125,13 @@ fun WelcomeScreen() {
                         Text(if (folder == null) "Choose a folder" else "Choose another folder", maxLines = 1)
                     }
                 }
+                if (folder == null && snapshot.tracks.isEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Apple Music library of AIFF files? Choose the folder — Android's media index does not list AIFF.",
+                        style = IosType.footnote, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                    )
+                }
                 if (!denied && snapshot.tracks.isEmpty() && scan.found == 0 && scan.error == null && snapshot.scannedAt > 0 && graph.settings.source.value == com.everettpenne.baliset.data.LibrarySnapshot.SOURCE_MEDIA) {
                     Spacer(Modifier.height(12.dp))
                     Text(

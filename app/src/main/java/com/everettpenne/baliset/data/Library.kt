@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import com.everettpenne.baliset.util.guessName
+import com.everettpenne.baliset.util.isAiffFileName
 import com.everettpenne.baliset.util.isCoverFileName
 import java.io.File
 
@@ -196,6 +197,19 @@ class Library(private val context: Context) {
 
     private fun readFileTags(uri: Uri, fileName: String): FileTags {
         val guess = guessName(fileName)
+        // AIFF is not supported by Android's tag reader; the file's own COMM and ID3 chunks are read instead.
+        if (isAiffFileName(fileName)) {
+            com.everettpenne.baliset.data.tags.Aiff.read(context, uri)?.let { aiff ->
+                return FileTags(
+                    title = aiff.tags.title ?: guess.title,
+                    artist = aiff.tags.artist ?: guess.artist,
+                    album = aiff.tags.album ?: UNKNOWN_ALBUM,
+                    durationMs = aiff.durationMs,
+                    trackNo = aiff.tags.track ?: 0,
+                    year = aiff.tags.year ?: 0,
+                )
+            }
+        }
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
@@ -302,6 +316,6 @@ class Library(private val context: Context) {
     private companion object {
         const val MAX_FOLDERS = 4_000
         const val MAX_TRACKS = 20_000
-        val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "wave", "wma", "aiff", "aif", "alac", "mpc", "ape")
+        val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "wave", "wma", "aiff", "aif", "aifc", "alac", "mpc", "ape")
     }
 }

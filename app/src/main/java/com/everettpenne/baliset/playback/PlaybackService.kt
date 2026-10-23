@@ -1,10 +1,16 @@
 package com.everettpenne.baliset.playback
 
 import android.app.PendingIntent
+import android.net.Uri
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.Extractor
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.everettpenne.baliset.MainActivity
@@ -17,12 +23,22 @@ import com.everettpenne.baliset.MainActivity
  * files, audio-focus handling, and "previous" restarting the current song once it is a few seconds in. Swiping the app away leaves a
  * playing queue alone; a paused one lets the service go.
  */
+@UnstableApi
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
+
+    /** AIFF is not in Media3, so our extractor is tried before the standard ones. */
+    private val extractors = object : ExtractorsFactory {
+        private val defaults = DefaultExtractorsFactory()
+        override fun createExtractors(): Array<Extractor> = arrayOf<Extractor>(AiffExtractor()) + defaults.createExtractors()
+        override fun createExtractors(uri: Uri, responseHeaders: Map<String, List<String>>): Array<Extractor> =
+            arrayOf<Extractor>(AiffExtractor()) + defaults.createExtractors(uri, responseHeaders)
+    }
 
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(this, extractors))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
                 /* handleAudioFocus = */ true,

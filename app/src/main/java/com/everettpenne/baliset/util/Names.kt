@@ -33,3 +33,12 @@ fun isCoverFileName(name: String): Boolean {
     val base = name.substringBeforeLast('.').lowercase()
     return base in setOf("cover", "folder", "front", "album", "albumart", "artwork", "thumb")
 }
+
+/** True for the AIFF family, which needs its own reader because Android has no AIFF support. */
+fun isAiffFileName(name: String): Boolean =
+    name.substringAfterLast('.', "").lowercase() in setOf("aif", "aiff", "aifc")
+
+/** The file name in a content or file URI, decoded; empty when there is none. */
+fun fileNameOf(uri: String): String = runCatching {
+    android.net.Uri.parse(uri).lastPathSegment.orEmpty()
+}.getOrDefault(uri.substringAfterLast('/'))

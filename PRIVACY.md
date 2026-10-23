@@ -7,8 +7,10 @@ Baliset is a local music player. It has no account, no server, no advertising an
 - **With "Scan my phone":** Android's media index, which lists the audio files on the phone. Baliset reads each track's title, artist,
   album, album id, track number, year, length and file name, and asks Android for a thumbnail (the embedded cover) for each album.
 - **With "Choose a folder":** only the folder you grant through the system picker, and its children. Baliset reads the same fields from
-  each audio file's tags, plus the embedded cover.
-- **Playback:** the file you choose, opened by the player. Nothing else is read from it.
+  each audio file's tags, plus the embedded cover. AIFF files have no Android tag reader, so Baliset reads their COMM and ID3 chunks
+  itself — on the phone, without a network request.
+- **Playback:** the file you choose, opened by the player. For AIFF, Baliset's own extractor parses the PCM chunks. Nothing else is read
+  from it.
 
 Baliset does not read contacts, messages, photos, location, the clipboard, other apps' notifications or anything outside the audio
 files and the folder you choose.

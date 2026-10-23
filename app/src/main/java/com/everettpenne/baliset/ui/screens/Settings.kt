@@ -161,6 +161,10 @@ fun SettingsScreen() {
                         else "${snapshot.tracks.size} songs · saved on this phone",
                         style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp),
                     )
+                    Text(
+                        "AIFF files are not in Android's media index; choose the folder for those libraries. Baliset reads their tags and cover art directly.",
+                        style = IosType.caption1, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp),
+                    )
                 }
             }
 

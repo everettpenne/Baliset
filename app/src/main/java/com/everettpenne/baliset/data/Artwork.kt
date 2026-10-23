@@ -10,6 +10,9 @@ import android.util.Size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.everettpenne.baliset.data.tags.Aiff
+import com.everettpenne.baliset.util.fileNameOf
+import com.everettpenne.baliset.util.isAiffFileName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -63,9 +66,10 @@ object Artwork {
     /** Reads and saves a cover for the album: folder image, then Android's thumbnail, then the file's own tags. */
     suspend fun extract(context: Context, albumKey: String, uri: String, coverUri: String? = null): Boolean = withContext(Dispatchers.IO) {
         if (has(context, albumKey)) return@withContext true
+        val isAiff = isAiffFileName(fileNameOf(uri))
         val picture = coverUri?.let { decodeUri(context, it) }
-            ?: runCatching { thumbnail(context, uri) }.getOrNull()
-            ?: embedded(context, uri)
+            ?: if (isAiff) aiffPicture(context, uri)
+            else runCatching { thumbnail(context, uri) }.getOrNull() ?: embedded(context, uri)
         if (picture == null) return@withContext false
         write(context, albumKey, picture)
     }
@@ -98,6 +102,11 @@ object Artwork {
         }
         return written
     }
+
+    /** The cover in an AIFF file's ID3 chunk; Android's retriever cannot see it. */
+    private fun aiffPicture(context: Context, uri: String): Bitmap? = runCatching {
+        Aiff.read(context, Uri.parse(uri))?.tags?.picture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+    }.getOrNull()
 
     /** Decodes a cover file found beside the music (a SAF document or a plain file). */
     private fun decodeUri(context: Context, uri: String): Bitmap? = runCatching {

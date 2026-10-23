@@ -3,9 +3,9 @@
 <img src="docs/images/icon.png" alt="Baliset app icon: a brass lyre on black" width="128" align="right" />
 
 **Baliset** is a private, local music player for Android with the iOS 26 liquid-glass look of the [Glass](https://github.com/everettpenne/Glass)
-suite. It plays the music already on your phone — no account, no ads, no upload — keeps the covers tidy (a folder's own art first, then
-MusicBrainz and the Cover Art Archive when you ask), and hands the launcher a real media session, so Uno Launcher's dynamic
-island, media widget, lock screen and control panel can show and control it.
+suite. It plays the music already on your phone — no account, no ads, no upload — including the AIFF files an Apple Music library is made
+of, keeps the covers tidy (a folder's own art first, then MusicBrainz and the Cover Art Archive when you ask), and hands the
+launcher a real media session, so Uno Launcher's dynamic island, media widget, lock screen and control panel can show and control it.
 
 It is the listening leg of the suite: Seekur reads Reddit, Spice plays Jellyfin, Thumper plays podcasts and feeds, Sietch opens files,
 and Baliset plays the songs that are simply *there*.
@@ -23,12 +23,21 @@ and Baliset plays the songs that are simply *there*.
   <img src="docs/images/settings.webp" width="180" alt="Settings, grouped like the rest of the suite">
   <img src="docs/images/cover-finder.webp" width="180" alt="Finding a cover on MusicBrainz">
 </p>
+<p align="center">
+  <img src="docs/images/aiff-songs.webp" width="180" alt="AIFF files from an Apple Music library, with their own tags, art and lengths">
+  <img src="docs/images/aiff-now-playing.webp" width="180" alt="Playing a big-endian AIFF, with the cover from its ID3 chunk">
+</p>
 
 ## What it does
 
 - **Your library, two ways.** Read Android's media index with one audio permission, or hand Baliset a folder in the system picker and
   it reads only that folder — no storage permission at all. Tags (title, artist, album, disc, year, length) and embedded cover art are
   read on the phone; untagged files get a sensible name from their file name and a cover-shaped placeholder.
+- **AIFF, the Apple Music kind.** Android's media stack has no AIFF support, so Baliset reads the FORM/COMM/SSND chunks and the
+  ID3 tag itself: titles, artists, albums, years, track numbers, lengths and the embedded cover all come straight from the file,
+  and a small Media3 extractor plays 16-bit PCM in both the usual big-endian AIFF and little-endian `sowt` AIFC, with seeking and
+  queue transitions. No conversion, no copies, no network. (Android's media index does not list AIFF, so use **Choose a
+  folder** for these libraries.)
 - **A player that keeps playing.** A Media3 `MediaSessionService` owns the sound: background playback, a media notification you can
   control, lock-screen and headset buttons, audio focus, "pause when headphones disconnect", gapless consecutive tracks, and a
   "previous restarts the song once it is past three seconds" rule.
@@ -91,6 +100,7 @@ download to Android's installer, which always asks first.
 | Sleep | In the player tap **Sleep**, and choose a length or the end of the track |
 | Rescan or change source | **Settings → Rescan now**, or the Folder row to choose another folder |
 | Fix a missing cover | Album ••• → **Find cover art**, or **Settings → Album art → Fill missing covers** |
+| An AIFF / Apple Music library | **Choose a folder** with the library; Android's media index does not list AIFF |
 
 ## Glass
 
@@ -123,11 +133,15 @@ without it: `BALISET_RELEASE_STORE_FILE`, `BALISET_RELEASE_STORE_PASSWORD`, `BAL
 ## Status and limits
 
 - **Baliset is a working name** for the app; the package id is `com.everettpenne.baliset`.
-- Version 0.2.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
+- Version 0.3.0. It has been built and exercised on an emulator (1080 × 2400, Android 17 / API 37) with sample music, in light and
   dark themes; **it has not been run on a physical phone or a GrapheneOS device.**
 - The cover lookup was exercised live against MusicBrainz and the Cover Art Archive (Kind of Blue, 94% match), as was the
   folder-cover order. MusicBrainz coverage is uneven for very new, very local and some classical releases; the candidate sheet is
   there for those.
+- AIFF was exercised with real files from a library of 790 AIFFs and 47 MP3s: 16-bit big-endian `.aif` and little-endian `sowt`
+  `.aiff`, including their ID3 tags, embedded covers, lengths, playback, seeking and next/previous. 24-bit and float AIFF, and the
+  compressed AIFF variants, are not supported; Android's media index cannot see AIFF at all, so the folder source is required.
+- WMA, APE, MPC, DSD, and FairPlay `.m4p` are still out of scope; the library had none of them.
 - The phone-index route is implemented, but the test emulator's media index exposed the pushed files without tags or `is_music`, so the
   screenshots use the folder route (the same scanner, reading each file's tags). On a phone whose index is populated, **Scan my phone**
   reads it; if the index is empty, the welcome page points you at **Choose a folder**.
