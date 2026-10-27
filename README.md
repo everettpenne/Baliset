@@ -1,6 +1,6 @@
 # Baliset
 
-<img src="docs/images/icon.png" alt="Baliset app icon: a brass lyre on black" width="128" align="right" />
+<img src="docs/images/icon.png" alt="Baliset app icon: a cream lyre on a warm amber gradient" width="128" align="right" />
 
 **Baliset** is a private, local music player for Android with the iOS 26 liquid-glass look of the [Glass](https://github.com/everettpenne/Glass)
 suite. It plays the music already on your phone — no account of ours, no ads, no upload — including the AIFF files an Apple Music library
