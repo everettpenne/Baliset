@@ -1,5 +1,10 @@
 # Baliset
 
+> **Retired: use Thumper.** Baliset's player was folded into [Thumper](https://github.com/everettpenne/Thumper) at version 1.0: local music and
+> AIFF, playlists and favourites, the library check, and optional Jellyfin music all live there now, beside podcasts and feeds. This repository
+> is kept for its history and its code; it is not the app to install, and shipping both would give the phone two music players and two
+> "continue listening" stories.
+
 <img src="docs/images/icon.png" alt="Baliset app icon: a cream lyre on a warm amber gradient" width="128" align="right" />
 
 **Baliset** is a private, local music player for Android with the iOS 26 liquid-glass look of the [Glass](https://github.com/everettpenne/Glass)
